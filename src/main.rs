@@ -80,7 +80,6 @@ fn detect_sex_contigs(assembly: &Assembly, params: &Params) -> HashSet<i32> {
         eprintln!("{}\t{}\t{}\t{}\t{}\t{}", depth, density, contig, assembly.contig_names[*contig as usize], assembly.contig_sizes.get(contig).unwrap(), sex);
 
     }
-
     sex_contigs
 }
 
