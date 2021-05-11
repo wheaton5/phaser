@@ -20,6 +20,16 @@ args:
         takes_value: true
         required: true
         help: tsv file with contig_name\tdepth 
+    - sex_contig_depth_cutoff:
+        long: sex_contig_depth_cutoff
+        takes_value: true
+        required: false
+        help: kmer coverage multiple cutoff to be called a sex contig, default = 0.65 ( * avg_depth )
+    - sex_contig_het_kmer_density_cutoff:
+        long: sex_contig_het_kmer_density_cutoff
+        takes_value: true
+        required: false
+        help: het kmer density cutoff for contig to be called a sex contig, default = 0.1 ( * avg het kmer density )
     - linked_read_mols:
         long: linked_read_mols
         short: l

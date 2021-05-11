@@ -52,13 +52,33 @@ fn main() {
 fn detect_sex_contigs(assembly: &Assembly, params: &Params) -> HashSet<i32> {
     let mut sex_contigs: HashSet<i32> = HashSet::new();
     let mut densities: Vec<(f32, f32, i32)> = Vec::new();
+    let mut cov_sum: f32 = 0.0;
+    let mut denom: f32 = 0.0;
+    let mut density_sum: f32 = 0.0;
+
+
     for (contig, kmers) in assembly.molecules.iter() {
         let size = assembly.contig_sizes.get(contig).expect("I am actually going crazy");
         densities.push((params.contig_kmer_cov[*contig as usize], (kmers.len() as f32)/(*size as f32), *contig));
+        let size = *size as f32;
+        cov_sum += params.contig_kmer_cov[*contig as usize] * size;
+        denom += size;
+        density_sum += kmers.len() as f32;
     }
-    densities.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+    let avg_cov = cov_sum / denom;
+    let avg_density = density_sum / denom;
+
+    //densities.sort_by(|a, b| a.partial_cmp(b).unwrap());
     for (depth, density, contig) in densities.iter() {
-        eprintln!("{}\t{}\t{}\t{}\t{}", depth, density, contig, assembly.contig_names[*contig as usize], assembly.contig_sizes.get(contig).unwrap());
+        let mut sex = "autosomal";
+        if *depth < params.sex_contig_cov_cutoff * avg_cov 
+            && *density < params.sex_contig_het_kmer_density_cutoff * avg_density {
+                sex_contigs.insert(*contig);
+            sex = "sex";
+        }
+        eprintln!("{}\t{}\t{}\t{}\t{}\t{}", depth, density, contig, assembly.contig_names[*contig as usize], assembly.contig_sizes.get(contig).unwrap(), sex);
+
     }
 
     sex_contigs
@@ -78,6 +98,8 @@ struct Params {
     threads: usize,
     seed: u8,
     ploidy: usize,
+    sex_contig_het_kmer_density_cutoff: f32,
+    sex_contig_cov_cutoff: f32,
     restarts: u32,
     min_hic_links: u32,
     break_window: usize,
@@ -163,6 +185,12 @@ fn load_params() -> Params {
     let ploidy = params.value_of("ploidy").unwrap_or("2");
     let ploidy = ploidy.to_string().parse::<usize>().unwrap();
 
+    let sex_contig_het_kmer_density_cutoff = params.value_of("sex_contig_het_kmer_density_cutoff").unwrap_or("0.1");
+    let sex_contig_het_kmer_density_cutoff = sex_contig_het_kmer_density_cutoff.to_string().parse::<f32>().unwrap();
+
+    let sex_contig_cov_cutoff = params.value_of("sex_contig_cov_cutoff").unwrap_or("0.65");
+    let sex_contig_cov_cutoff = sex_contig_cov_cutoff.to_string().parse::<f32>().unwrap();
+        
     let min_hic_links = params.value_of("min_hic_links").unwrap_or("4");
     let min_hic_links = min_hic_links.to_string().parse::<u32>().unwrap();
 
@@ -181,6 +209,8 @@ fn load_params() -> Params {
         assembly_fasta: assembly_fasta.to_string(),
         threads: threads,
         seed: seed,
+        sex_contig_het_kmer_density_cutoff: sex_contig_het_kmer_density_cutoff,
+        sex_contig_cov_cutoff: sex_contig_cov_cutoff,
         restarts: restarts,
         ploidy: ploidy,
         min_hic_links: min_hic_links,
