@@ -15,6 +15,11 @@ args:
         takes_value: true
         required: true
         help: het_kmers.tsv from het_snp_kmers output
+    - contig_kmer_depths:
+        long: contig_kmer_depths
+        takes_value: true
+        required: true
+        help: tsv file with contig_name\tdepth 
     - linked_read_mols:
         long: linked_read_mols
         short: l

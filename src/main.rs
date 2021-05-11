@@ -45,19 +45,20 @@ fn main() {
     eprintln!("loading assembly kmers");
     let assembly = load_assembly_kmers(&params.assembly_kmers, &params.assembly_fasta, &kmers);
 
-    let sex_contigs = detect_sex_contigs(&assembly);
+    let sex_contigs = detect_sex_contigs(&assembly, &params);
+
 }
 
-fn detect_sex_contigs(assembly: &Assembly) -> HashSet<i32> {
+fn detect_sex_contigs(assembly: &Assembly, params: &Params) -> HashSet<i32> {
     let mut sex_contigs: HashSet<i32> = HashSet::new();
-    let mut densities: Vec<(f32, i32)> = Vec::new();
+    let mut densities: Vec<(f32, f32, i32)> = Vec::new();
     for (contig, kmers) in assembly.molecules.iter() {
         let size = assembly.contig_sizes.get(contig).expect("I am actually going crazy");
-        densities.push(((kmers.len() as f32)/(*size as f32), *contig));
+        densities.push((params.contig_kmer_cov[*contig as usize], (kmers.len() as f32)/(*size as f32), *contig));
     }
     densities.sort_by(|a, b| a.partial_cmp(b).unwrap());
-    for (density, contig) in densities.iter() {
-        eprintln!("{}\t{}\t{}\t{}", density, contig, assembly.contig_names[*contig as usize], assembly.contig_sizes.get(contig).unwrap());
+    for (depth, density, contig) in densities.iter() {
+        eprintln!("{}\t{}\t{}\t{}\t{}", depth, density, contig, assembly.contig_names[*contig as usize], assembly.contig_sizes.get(contig).unwrap());
     }
     sex_contigs
 }
@@ -69,6 +70,7 @@ struct Params {
     txg_mols: Vec<String>,
     hic_mols: Vec<String>,
     ccs_mols: Vec<String>,
+    contig_kmer_cov: Vec<f32>,
     output: String,
     assembly_kmers: String,
     assembly_fasta: String,
@@ -132,6 +134,19 @@ fn load_params() -> Params {
         None => (),
     }
 
+
+    let mut contig_kmer_cov: Vec<f32> = Vec::new();
+    contig_kmer_cov.push(0.0); // contig ids are 1 indexed
+    let contig_kmer_cov_file = params.value_of("contig_kmer_depths").unwrap();
+    let f = File::open(contig_kmer_cov_file).expect("Unable to open contig_kmer_depths file");
+    let f = BufReader::new(f);
+
+    for line in f.lines() {
+        let line = line.expect("unable to read contig_kmer_depths line");
+        let toks: Vec<&str> = line.split("\t").collect();
+        contig_kmer_cov.push(toks[1].to_string().parse::<f32>().expect("cannot parse float in contig_kmer_depths file"));
+    }
+
     let threads = params.value_of("threads").unwrap_or("1");
     let threads = threads.to_string().parse::<usize>().unwrap();
 
@@ -160,6 +175,7 @@ fn load_params() -> Params {
         txg_mols: txg_mols,
         hic_mols: hic_mols,
         ccs_mols: ccs_mols,
+        contig_kmer_cov: contig_kmer_cov,
         assembly_kmers: assembly_kmers.to_string(),
         assembly_fasta: assembly_fasta.to_string(),
         threads: threads,
