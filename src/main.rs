@@ -78,6 +78,7 @@ fn detect_sex_contigs(assembly: &Assembly, params: &Params) -> HashSet<i32> {
     let mut density_sum: f32 = 0.0;
 
 
+    eprintln!("ok how many contigs are there in the assembly {}", assembly.molecules.len());
     for (contig, kmers) in assembly.molecules.iter() {
         let size = assembly.contig_sizes.get(contig).expect("I am actually going crazy");
         densities.push((params.contig_kmer_cov[*contig as usize], (kmers.len() as f32)/(*size as f32), *contig));
