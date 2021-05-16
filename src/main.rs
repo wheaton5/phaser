@@ -72,20 +72,25 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, par
 
 fn detect_sex_contigs(assembly: &Assembly, params: &Params) -> HashSet<i32> {
     let mut sex_contigs: HashSet<i32> = HashSet::new();
-    let mut densities: Vec<(f32, f32, i32)> = Vec::new();
+    let mut densities: Vec<(f32, f32, usize)> = Vec::new();
     let mut cov_sum: f32 = 0.0;
     let mut denom: f32 = 0.0;
     let mut density_sum: f32 = 0.0;
 
 
     eprintln!("ok how many contigs are there in the assembly {}", assembly.molecules.len());
-    for (contig, kmers) in assembly.molecules.iter() {
-        let size = assembly.contig_sizes.get(contig).expect("I am actually going crazy");
-        densities.push((params.contig_kmer_cov[*contig as usize], (kmers.len() as f32)/(*size as f32), *contig));
+
+    for contig_id in 1..assembly.contig_names.len() {
+        let size = assembly.contig_sizes.get(&(contig_id as i32)).expect("I am actually going crazy");
+        let kmers = match assembly.molecules.get(&(contig_id as i32)) {
+            Some(x) => x.len(),
+            None => 0,
+        };
+        densities.push((params.contig_kmer_cov[contig_id], (kmers as f32)/(*size as f32), contig_id));
         let size = *size as f32;
-        cov_sum += params.contig_kmer_cov[*contig as usize] * size;
+        cov_sum += params.contig_kmer_cov[contig_id] * size;
         denom += size;
-        density_sum += kmers.len() as f32;
+        density_sum += kmers as f32;
     }
 
     let avg_cov = cov_sum / denom;
@@ -97,10 +102,10 @@ fn detect_sex_contigs(assembly: &Assembly, params: &Params) -> HashSet<i32> {
         let mut sex = "autosomal";
         if *depth < params.sex_contig_cov_cutoff * avg_cov 
             && *density < params.sex_contig_het_kmer_density_cutoff * avg_density {
-                sex_contigs.insert(*contig);
+                sex_contigs.insert(*contig as i32);
             sex = "sex";
         }
-        eprintln!("{}\t{}\t{}\t{}\t{}\t{}", depth, density, contig, assembly.contig_names[*contig as usize], assembly.contig_sizes.get(contig).unwrap(), sex);
+        eprintln!("{}\t{}\t{}\t{}\t{}\t{}", depth, density, contig, assembly.contig_names[*contig as usize], assembly.contig_sizes.get(&(*contig as i32)).unwrap(), sex);
 
     }
     sex_contigs
