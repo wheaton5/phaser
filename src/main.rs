@@ -40,20 +40,22 @@ fn main() {
     eprintln!("loading long reads");
     let ccs = load_hifi(Some(&params.ccs_mols), &kmers);
     eprintln!("loading linked reads");
-    let txg_barcodes = load_linked_read_barcodes(Some(&params.txg_mols), &kmers);
+    //let txg_barcodes = load_linked_read_barcodes(Some(&params.txg_mols), &kmers);
     eprintln!("loading assembly kmers");
     let assembly = load_assembly_kmers(&params.assembly_kmers, &params.assembly_fasta, &kmers);
 
     let sex_contigs = detect_sex_contigs(&assembly, &params);
     //phase(assembly, hic_mols, ccs, txg_barcodes, &params);
+    phase(assembly, hic_mols, ccs, &params);
 
 }
 
-fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, params: &Params) {
+//fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, params: &Params) {
+fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, params: &Params) {
     eprintln!("phasing");
     let hic_kmer_mols = hic_mols.get_canonical_kmer_mols();
     let ccs_kmer_mols = ccs_mols.get_canonical_kmer_mols();
-    let txg_kmer_mols = txg_mols.get_canonical_kmer_mols();
+    //let txg_kmer_mols = txg_mols.get_canonical_kmer_mols();
 
     for contig in 1..(assembly.contig_kmers.len()+1) {
         if contig > 1 { break } // TODO remove
