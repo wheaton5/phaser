@@ -11,7 +11,7 @@ use bio::utils::TextSlice;
 use std::path::Path;
 
 use phasst_lib::{
-    load_assembly_kmers, load_hic, load_hifi, load_linked_read_barcodes, Assembly, Mols, Kmers,
+    load_assembly_kmers, load_hic, load_hifi, load_linked_read_barcodes, Assembly, Mols, Kmers, KmerMols,
 };
 use rayon::prelude::*;
 
@@ -46,7 +46,7 @@ fn main() {
 
     let sex_contigs = detect_sex_contigs(&assembly, &params);
     //phase(assembly, hic_mols, ccs, txg_barcodes, &params);
-    phase(assembly, hic_mols, ccs, &params);
+    //phase(assembly, hic_mols, ccs, &params);
 
 }
 
@@ -61,16 +61,47 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, params: &Params) {
         if contig > 1 { break } // TODO remove
         let mut putative_phasing: Vec<Option<bool>> = Vec::new();
         let mut kmer_phasing_consistency_counts: HashMap<i32, [u8;4]> = HashMap::new();
-        if let Some(kmer_positions) = assembly.contig_kmers.get(&(contig as i32)) {
+
+        let mut pairwise_consistencies: HashMap<(i32, i32), [u8;4]> = HashMap::new();
+        for ccs_mol in ccs_mols.get_molecules() {
+            for k1dex in 0..ccs_mol.len() {
+                let k1 = ccs_mol[k1dex].abs();
+                for k2dex in k1dex..ccs_mol.len() {
+                    let k2 = ccs_mol[k2dex].abs();
+                    let key1 = k1.min(k2);
+                    let key2 = k1.max(k2);
+                    let counts = pairwise_consistencies.entry((key1, key2)).or_insert([0;4]);
+                    let k1_ref = k1 % 2 == 0; // which allele ref or alt, pairs are 1,2   3,4 etc
+                    let k2_ref = k2 % 2 == 0;
+                    if k1_ref && k2_ref {
+                        counts[0] += 1;
+                    } else if !k1_ref && !k2_ref {
+                        counts[1] += 1;
+                    } else if k1_ref && !k2_ref {
+                        counts[2] += 1;
+                    } else {
+                        counts[3] += 1;
+                    }
+                }
+            }
+        }
+
+
+        if let Some(kmer_positions) = assembly.contig_kmers.get(&(contig as i32)) { // kmer_positions is a Vec<(position, kmer_id)>
             putative_phasing.push(Some(true));
-            //update_phasing_consistency_counts(&mut kmer_phasing_consistency_counts, &ccs_kmer_mols, &ccs_mols);
-            //for 
+            let (position, kmer_id) = kmer_positions[0];
+            update_phasing_consistency_counts(&mut kmer_phasing_consistency_counts, &ccs_kmer_mols, &ccs_mols);
+            for index in 1..kmer_positions.len() {
+
+            }
         }
     }
 
 }
 
-//fn update_phasing_consistency_counts(kmer_phasing_consistency_counts: &mut HashMap<i32, [u8;4]>, ccs_kmer_mols: &)
+fn update_phasing_consistency_counts(kmer_phasing_consistency_counts: &mut HashMap<i32, [u8;4]>, kmer_mols: &KmerMols, mols: &Mols) {
+
+}
 
 fn detect_sex_contigs(assembly: &Assembly, params: &Params) -> HashSet<i32> {
     let mut sex_contigs: HashSet<i32> = HashSet::new();
@@ -88,6 +119,7 @@ fn detect_sex_contigs(assembly: &Assembly, params: &Params) -> HashSet<i32> {
             Some(x) => x.len(),
             None => 0,
         };
+        eprintln!("contig_id {}",contig_id);
         densities.push((params.contig_kmer_cov[contig_id], (kmers as f32)/(*size as f32), contig_id));
         let size = *size as f32;
         cov_sum += params.contig_kmer_cov[contig_id] * size;
