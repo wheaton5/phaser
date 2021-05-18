@@ -87,6 +87,21 @@ args:
         required: false
         help: minimum number of hic links to count in same phase block (default 4)
         takes_value: true
+    - min_minor_allele_fraction:
+        long: min_minor_allele_fraction
+        required: false
+        takes_value: true
+        help: minimum minor allele fraction to be counted for phasing consistency -- if low it might not be actually heterozygous (default 0.15)
+    - min_phasing_consistency_counts:
+        long: min_phasing_consistency_counts
+        required: false
+        takes_value: true
+        help: min number of molecules reaching forward to new kmer that are phasing consistent (default 8)
+    - min_phasing_consistency_percent:
+        long: min_phasing_consistency_percent
+        help: min percent of molecules reaching forward to new kmer that are phasing consistent (default 0.9)
+        required: false
+        takes_value: true
     - break_window:
         long: break_window
         required: false

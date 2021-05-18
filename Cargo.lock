@@ -657,17 +657,19 @@ name = "phaser"
 version = "0.1.0"
 dependencies = [
  "bio",
+ "bit-set",
  "clap",
  "disjoint-set",
  "hashbrown 0.1.8",
  "phasst_lib",
+ "rand",
  "rayon",
 ]
 
 [[package]]
 name = "phasst_lib"
 version = "0.1.0"
-source = "git+https://github.com/wheaton5/phasst_lib.git?branch=main#4ec4e19e837200262d7e0823e0457bfd48f8a064"
+source = "git+https://github.com/wheaton5/phasst_lib.git?branch=main#f4a557f73c788807608f007d9db2b8cc26a8b59e"
 dependencies = [
  "bio",
  "byteorder",

@@ -4,6 +4,10 @@ extern crate bio;
 extern crate disjoint_set;
 extern crate hashbrown;
 extern crate phasst_lib;
+extern crate rand;
+extern crate bit_set;
+
+use bit_set::BitSet;
 
 use bio::io::fasta;
 use bio::io::fasta::Record;
@@ -28,6 +32,12 @@ use std::io::BufReader;
 use std::io::BufRead;
 use std::io::Read;
 
+use rand::Rng;
+use rand::rngs::StdRng;
+use rand::SeedableRng;
+use rand::thread_rng;
+use rand::seq::SliceRandom;
+
 
 fn main() {
     println!("Welcome to phasst phase");
@@ -46,62 +56,299 @@ fn main() {
 
     let sex_contigs = detect_sex_contigs(&assembly, &params);
     //phase(assembly, hic_mols, ccs, txg_barcodes, &params);
-    //phase(assembly, hic_mols, ccs, &params);
+    phase(assembly, hic_mols, ccs, sex_contigs, &params);
 
 }
 
+fn get_mean_sd_pairwise_consistencies(pairwise_kmer_consistency_counts: &HashMap<i32, u32>) -> (f32, f32, f32, f32) {
+    let mut sum = 0;
+    for (_kmer, consistency) in pairwise_kmer_consistency_counts.iter() {
+        sum += consistency;
+    }
+    let denom = pairwise_kmer_consistency_counts.len() as f32;
+    let mean_phasing_consistency = (sum as f32)/denom;
+    let mut sum_of_squared_diffs = 0.0;
+    for (_kmer, consistency) in pairwise_kmer_consistency_counts.iter() {
+        sum_of_squared_diffs += f32::powf(*consistency as f32 - mean_phasing_consistency, 2.0);
+    }
+    sum_of_squared_diffs /= denom;
+    let sd_phasing_consistency = f32::sqrt(sum_of_squared_diffs);
+    let min_seed_consistency = mean_phasing_consistency - sd_phasing_consistency;
+    let max_seed_consistency = mean_phasing_consistency + sd_phasing_consistency;
+    (mean_phasing_consistency, sd_phasing_consistency, min_seed_consistency, max_seed_consistency)
+}
+
+fn get_pairwise_consistencies(ccs_mols: &Mols) -> HashMap<(i32, i32), [u8; 4]> {
+    let mut pairwise_consistencies: HashMap<(i32, i32), [u8; 4]> = HashMap::new();
+    for ccs_mol in ccs_mols.get_molecules() {
+        for k1dex in 0..ccs_mol.len() {
+            let k1 = ccs_mol[k1dex].abs();
+            for k2dex in k1dex..ccs_mol.len() {
+                let k2 = ccs_mol[k2dex].abs();
+                let mut key1 = k1.min(k2); // making the key in the hashtable canonical for which one is first and which one is second in the tuple
+                let mut key2 = k1.max(k2);
+                if key1 % 2 == 0 { // making the key in the hashtable canonical for which allele is used as the key
+                    key1 = key1 - 1;
+                }
+                if key2 % 2 == 0 {
+                    key2 = key2 - 1;
+                }
+                let counts = pairwise_consistencies.entry((key1, key2)).or_insert([0;4]);
+                let k1_ref = k1 % 2 == 0; // which allele ref or alt, pairs are 1,2   3,4 etc
+                let k2_ref = k2 % 2 == 0;
+                if k1_ref && k2_ref {
+                    counts[0] += 1;
+                } else if !k1_ref && !k2_ref {
+                    counts[1] += 1;
+                } else if k1_ref && !k2_ref {
+                    counts[2] += 1;
+                } else {
+                    counts[3] += 1;
+                }
+            }
+        }
+    }
+    pairwise_consistencies
+}
+
+fn count_kmer_consistencies(pairwise_consistencies: &HashMap<(i32, i32), [u8;4]>, params: &Params) -> HashMap<i32, u32> {
+    let mut pairwise_kmer_consistency_counts: HashMap<i32, u32> = HashMap::new();
+    let thresholds = PhasingConsistencyThresholds{
+        min_count: params.min_phasing_consistency_counts,
+        min_percent: params.min_phasing_consistency_percent,
+        minor_allele_fraction: params.min_minor_allele_fraction,
+    };
+    for ((k1, k2), counts) in pairwise_consistencies.iter() {
+        let consistency = is_phasing_consistent(counts, &thresholds);
+        {
+            let k1_counts = pairwise_kmer_consistency_counts.entry(*k1).or_insert(0);
+            if consistency.is_consistent {
+                *k1_counts += 1;
+            }
+        }
+        let k2_counts = pairwise_kmer_consistency_counts.entry(*k2).or_insert(0);
+        if consistency.is_consistent {
+            *k2_counts += 1;
+        }
+    }
+    pairwise_kmer_consistency_counts
+}
+
 //fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, params: &Params) {
-fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, params: &Params) {
+fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, sex_contigs: HashSet<i32>, params: &Params) {
     eprintln!("phasing");
-    let hic_kmer_mols = hic_mols.get_canonical_kmer_mols();
-    let ccs_kmer_mols = ccs_mols.get_canonical_kmer_mols();
+    let hic_kmer_mols = hic_mols.get_kmer_mols();
+    let ccs_kmer_mols = ccs_mols.get_kmer_mols();
     //let txg_kmer_mols = txg_mols.get_canonical_kmer_mols();
+
+
+    let pairwise_consistencies: HashMap<(i32, i32), [u8;4]> = get_pairwise_consistencies(&ccs_mols);
+
+    // count kmer consistencies to make sure we seed on good kmers
+    let pairwise_kmer_consistency_counts: HashMap<i32, u32> = count_kmer_consistencies(&pairwise_consistencies);
+    
+    // get average consistency counts
+    let (_mean_phasing_consistency, _sd_phasing_consistency, min_seed_consistency, max_seed_consistency) = 
+        get_mean_sd_pairwise_consistencies(&pairwise_kmer_consistency_counts);
+    
+    let thresholds = PhasingConsistencyThresholds {
+        min_count: params.min_phasing_consistency_counts,
+        min_percent: params.min_phasing_consistency_percent,
+        minor_allele_fraction: params.min_minor_allele_fraction,
+    };
+    
 
     for contig in 1..(assembly.contig_kmers.len()+1) {
         if contig > 1 { break } // TODO remove
         let mut putative_phasing: Vec<Option<bool>> = Vec::new();
-        let mut kmer_phasing_consistency_counts: HashMap<i32, [u8;4]> = HashMap::new();
 
-        let mut pairwise_consistencies: HashMap<(i32, i32), [u8;4]> = HashMap::new();
-        for ccs_mol in ccs_mols.get_molecules() {
-            for k1dex in 0..ccs_mol.len() {
-                let k1 = ccs_mol[k1dex].abs();
-                for k2dex in k1dex..ccs_mol.len() {
-                    let k2 = ccs_mol[k2dex].abs();
-                    let key1 = k1.min(k2);
-                    let key2 = k1.max(k2);
-                    let counts = pairwise_consistencies.entry((key1, key2)).or_insert([0;4]);
-                    let k1_ref = k1 % 2 == 0; // which allele ref or alt, pairs are 1,2   3,4 etc
-                    let k2_ref = k2 % 2 == 0;
-                    if k1_ref && k2_ref {
-                        counts[0] += 1;
-                    } else if !k1_ref && !k2_ref {
-                        counts[1] += 1;
-                    } else if k1_ref && !k2_ref {
-                        counts[2] += 1;
-                    } else {
-                        counts[3] += 1;
+        //let mut possible_positions: HashSet<usize> = HashSet::new();
+        let kmer_positions = assembly.contig_kmers.get(&(contig as i32)).expect("please no");
+        for _ in 0..kmer_positions.len() { // fill in phasings with unphased and we will come back and put in phasings as we... phase
+            putative_phasing.push(None);
+        }
+        let mut seeder: RandSeeder = RandSeeder::new(kmer_positions.len());
+        let mut used_ccs_mols: BitSet = BitSet::new();
+        let mut deferred_seed: Option<usize> = None;
+
+        'outer_loop:
+            loop {
+                let mut kmer_phasing_consistency_counts: HashMap<i32, [u8; 4]> = HashMap::new();
+                if let Some(seed_index) = deferred_seed {
+                    // going backwards TODO
+                    break 'outer_loop;
+                } else {
+                    // going forwards, get new good seed
+                    while let Some(seed_index) = seeder.next() {
+                        let (_position, kmer) = kmer_positions[seed_index]; // position is base position, index is the... index
+                        let canonical_kmer = Kmers::canonical_pair(kmer.abs());
+                        let kmer_consistency = *pairwise_kmer_consistency_counts.get(&canonical_kmer).unwrap_or(&0) as f32;
+
+                        if !(kmer_consistency > min_seed_consistency && kmer_consistency < max_seed_consistency) {
+                            seeder.backtrack();
+                            continue;
+                        } else {
+                            deferred_seed = Some(seed_index); // start back here when done going forward
+                            putative_phasing[seed_index] = Some(true);
+
+                            add_kmer_and_update_phasing_consistency_counts(&mut kmer_phasing_consistency_counts, 
+                                canonical_kmer, true, &ccs_kmer_mols, &ccs_mols, &mut used_ccs_mols);
+                            for index in (seed_index+1)..kmer_positions.len() { // going forward
+                                let (_position, kmer) = kmer_positions[index];
+                                let canonical_kmer = Kmers::canonical_pair(kmer);
+                                if let Some(counts) = kmer_phasing_consistency_counts.get(&canonical_kmer) {
+                                    let consistency = is_phasing_consistent(counts, &thresholds);
+                                    if consistency.is_consistent {
+                                        putative_phasing[index] = Some(consistency.cis);
+                                        add_kmer_and_update_phasing_consistency_counts(&mut kmer_phasing_consistency_counts, 
+                                            canonical_kmer, consistency.cis, &ccs_kmer_mols, &ccs_mols, &mut used_ccs_mols);
+                                        seeder.consume(index);
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
-        }
-
-
-        if let Some(kmer_positions) = assembly.contig_kmers.get(&(contig as i32)) { // kmer_positions is a Vec<(position, kmer_id)>
-            putative_phasing.push(Some(true));
-            let (position, kmer_id) = kmer_positions[0];
-            update_phasing_consistency_counts(&mut kmer_phasing_consistency_counts, &ccs_kmer_mols, &ccs_mols);
-            for index in 1..kmer_positions.len() {
-
-            }
-        }
+  
     }
 
 }
 
-fn update_phasing_consistency_counts(kmer_phasing_consistency_counts: &mut HashMap<i32, [u8;4]>, kmer_mols: &KmerMols, mols: &Mols) {
+struct PhasingConsistencyThresholds {
+    min_count: usize,
+    min_percent: f32,
+    minor_allele_fraction: f32,
+}
+
+fn increment_consistency_counts(x: bool, y: i32, counts: &mut [u8;4]) {
+    let new_thingy = y.abs() % 2 == 0;
+    if x && new_thingy {
+        counts[0] += 1;
+    } else if !x && !new_thingy {
+        counts[1] += 1;
+    } else if x && !new_thingy {
+        counts[2] += 1;
+    } else {
+        counts[3] += 1;
+    }
+}
+
+fn add_kmer_and_update_phasing_consistency_counts(kmer_phasing_consistency_counts: &mut HashMap<i32, [u8;4]>, kmer: i32, cis: bool, kmer_mols: &KmerMols, mols: &Mols, used: &mut BitSet) {
+    for moldex in kmer_mols.get_mols(kmer.abs()) { // loop over molecules which have kmer then loop over molecules that have the pair
+        if used.contains(*moldex) {
+            continue;
+        }
+        for new_kmer in mols.get_molecule_kmers(*moldex) {
+            let counts = kmer_phasing_consistency_counts.entry(Kmers::canonical_pair(*new_kmer)).or_insert([0;4]);
+            increment_consistency_counts(cis, *new_kmer, &mut counts);
+        }
+        used.insert(*moldex);
+    }
+    for moldex in kmer_mols.get_mols(Kmers::pair(kmer.abs())) {
+         if used.contains(*moldex) {
+            continue;
+        }
+        for new_kmer in mols.get_molecule_kmers(*moldex) {
+            let counts = kmer_phasing_consistency_counts.entry(Kmers::canonical_pair(*new_kmer)).or_insert([0;4]);
+            increment_consistency_counts(!cis, *new_kmer, &mut counts);
+        }
+        used.insert(*moldex);
+    }
 
 }
+
+struct RandSeeder {
+    seeded_rng: StdRng,
+    shuffled_vec: Vec<usize>,
+    vec_size: usize, // as we use up positions in the phasing process, we will move them to the end and shrink the vec_size
+    current_position: usize, // current_position in shuffled_vec
+    reverse_index: HashMap<usize, usize>, // map from position index to index in shuffled_vec so we can 
+                                          // find them and move them to the back of shuffled_vec as they are used in the phasing process
+} 
+
+impl RandSeeder {
+    fn new(size: usize) -> RandSeeder {
+        let seed: [u8; 32] = [4; 32]; // guarranteed to be random, chosen by fair dice roll https://xkcd.com/221/
+        let mut rng: StdRng = SeedableRng::from_seed(seed);
+        let mut shuffled_vec: Vec<usize> = (0..size).collect::<Vec<usize>>();
+        let mut reverse_index: HashMap<usize, usize> = HashMap::new();
+        for (index, shuffled_index) in shuffled_vec.iter().enumerate() {
+            reverse_index.insert(*shuffled_index, index);
+        }
+        shuffled_vec.shuffle(&mut rng);
+        RandSeeder {
+            seeded_rng: rng,
+            shuffled_vec: shuffled_vec,
+            vec_size: size,
+            current_position: 0,
+            reverse_index: reverse_index,
+        }
+    }
+
+    fn consume(&mut self, index: usize) {
+        let shuffled_index = self.reverse_index.get(&index).expect("please don't");
+        let tmp = self.shuffled_vec[*shuffled_index];
+        self.shuffled_vec[*shuffled_index] = self.shuffled_vec[self.vec_size];
+        self.shuffled_vec[self.vec_size] = tmp;
+        self.vec_size -= 1;
+    } 
+
+    fn next(&mut self) -> Option<usize> {
+        self.current_position += 1;
+        if self.current_position >= self.vec_size {
+            return None
+        } else {
+            Some(self.shuffled_vec[self.current_position - 1])
+        }
+    }
+
+    fn backtrack(&mut self) -> bool {
+        if self.current_position > 0 {
+            return false
+        }
+        self.current_position -= 1;
+        let tmp = self.shuffled_vec[self.current_position];
+        let pos = self.seeded_rng.gen_range(self.current_position + 1, self.vec_size);
+        self.reverse_index.insert(tmp, pos);
+        self.reverse_index.insert(self.shuffled_vec[pos], self.current_position);
+        self.shuffled_vec[self.current_position] = self.shuffled_vec[pos];
+        self.shuffled_vec[pos] = tmp;
+        return true
+    }
+}
+
+
+struct PhasingConsistency {
+    is_consistent: bool,
+    cis: bool,
+}
+
+fn is_phasing_consistent(counts: &[u8;4], thresholds: &PhasingConsistencyThresholds) -> PhasingConsistency {
+    let cis = (counts[0] + counts[1]) as f32;
+    let trans = (counts[2] + counts[3]) as f32;
+    let total = cis + trans;
+    if cis > trans {
+        let consistent_percentage = cis/total;
+        if total > thresholds.min_count as f32 && consistent_percentage > thresholds.min_percent {
+            let minor_allele = counts[0].min(counts[1]) as f32;
+            if minor_allele/cis > thresholds.minor_allele_fraction {
+                return PhasingConsistency{is_consistent: true, cis: true};
+            }
+        } 
+    } else {
+        let consistent_percentage = trans/total;
+        if total > thresholds.min_count as f32 && consistent_percentage > thresholds.min_percent {
+            let minor_allele = counts[2].min(counts[3]) as f32;
+            if minor_allele/trans > thresholds.minor_allele_fraction {
+                return PhasingConsistency{is_consistent: true, cis: false};
+            }
+        } 
+    }
+    PhasingConsistency{is_consistent: false, cis: false}
+}
+
+
 
 fn detect_sex_contigs(assembly: &Assembly, params: &Params) -> HashSet<i32> {
     let mut sex_contigs: HashSet<i32> = HashSet::new();
@@ -131,7 +378,7 @@ fn detect_sex_contigs(assembly: &Assembly, params: &Params) -> HashSet<i32> {
     let avg_density = density_sum / denom;
 
     //densities.sort_by(|a, b| a.partial_cmp(b).unwrap());
-    eprintln!("kmer_depth\thet_kmer_density\tcontig_id\tcontig_name\tcontig_length\tcontig_classification");
+    eprintln!("kmer_depth\thet_kmer_density\tcontig_id\tcontig_name\tcontig_length\tcontig_classification\tsex_contig_cov_cutoff\tsex_density_cutoff");
     for (depth, density, contig) in densities.iter() {
         let mut sex = "autosomal";
         if *depth < params.sex_contig_cov_cutoff * avg_cov 
@@ -139,7 +386,11 @@ fn detect_sex_contigs(assembly: &Assembly, params: &Params) -> HashSet<i32> {
                 sex_contigs.insert(*contig as i32);
             sex = "sex";
         }
-        eprintln!("{}\t{}\t{}\t{}\t{}\t{}", depth, density, contig, assembly.contig_names[*contig as usize], assembly.contig_sizes.get(&(*contig as i32)).unwrap(), sex);
+        eprintln!("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}", depth, density, contig, 
+            assembly.contig_names[*contig as usize], 
+            assembly.contig_sizes.get(&(*contig as i32)).unwrap(), 
+            sex,  params.sex_contig_cov_cutoff * avg_cov, 
+            params.sex_contig_het_kmer_density_cutoff * avg_density);
 
     }
     sex_contigs
@@ -163,6 +414,9 @@ struct Params {
     sex_contig_cov_cutoff: f32,
     restarts: u32,
     min_hic_links: u32,
+    min_minor_allele_fraction: f32,
+    min_phasing_consistency_counts: usize,
+    min_phasing_consistency_percent: f32,
     break_window: usize,
 }
 
@@ -259,6 +513,15 @@ fn load_params() -> Params {
     let break_window = break_window.to_string().parse::<usize>().unwrap();
     eprintln!("break window {}", break_window);
 
+    let min_minor_allele_fraction = params.value_of("min_minor_allele_fraction").unwrap_or("0.15");
+    let min_minor_allele_fraction = min_minor_allele_fraction.to_string().parse::<f32>().unwrap();
+
+    let min_phasing_consistency_counts = params.value_of("min_phasing_consistency_counts").unwrap_or("8");
+    let min_phasing_consistency_counts = min_phasing_consistency_counts.to_string().parse::<usize>().unwrap(); 
+
+    let min_phasing_consistency_percent = params.value_of("min_phasing_consistency_percent").unwrap_or("0.9");
+    let min_phasing_consistency_percent = min_phasing_consistency_percent.to_string().parse::<f32>().unwrap();
+
     Params {
         het_kmers: het_kmers.to_string(),
         output: output.to_string(),
@@ -273,6 +536,9 @@ fn load_params() -> Params {
         sex_contig_het_kmer_density_cutoff: sex_contig_het_kmer_density_cutoff,
         sex_contig_cov_cutoff: sex_contig_cov_cutoff,
         restarts: restarts,
+        min_minor_allele_fraction: min_minor_allele_fraction,
+        min_phasing_consistency_counts: min_phasing_consistency_counts,
+        min_phasing_consistency_percent: min_phasing_consistency_percent,
         ploidy: ploidy,
         min_hic_links: min_hic_links,
         break_window: break_window,
