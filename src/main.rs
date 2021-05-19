@@ -381,7 +381,7 @@ fn detect_sex_contigs(assembly: &Assembly, params: &Params) -> HashSet<i32> {
     let mut density_sum: f32 = 0.0;
 
 
-    eprintln!("ok how many contigs are there in the assembly {}", assembly.molecules.len());
+    //eprintln!("ok how many contigs are there in the assembly {}", assembly.molecules.len());
 
     for contig_id in 1..assembly.contig_names.len() {
         let size = assembly.contig_sizes.get(&(contig_id as i32)).expect("I am actually going crazy");
@@ -389,7 +389,7 @@ fn detect_sex_contigs(assembly: &Assembly, params: &Params) -> HashSet<i32> {
             Some(x) => x.len(),
             None => 0,
         };
-        eprintln!("contig_id {}",contig_id);
+        //eprintln!("contig_id {}",contig_id);
         densities.push((params.contig_kmer_cov[contig_id], (kmers as f32)/(*size as f32), contig_id));
         let size = *size as f32;
         cov_sum += params.contig_kmer_cov[contig_id] * size;
@@ -400,8 +400,7 @@ fn detect_sex_contigs(assembly: &Assembly, params: &Params) -> HashSet<i32> {
     let avg_cov = cov_sum / denom;
     let avg_density = density_sum / denom;
 
-    //densities.sort_by(|a, b| a.partial_cmp(b).unwrap());
-    eprintln!("kmer_depth\thet_kmer_density\tcontig_id\tcontig_name\tcontig_length\tcontig_classification\tsex_contig_cov_cutoff\tsex_density_cutoff");
+    //eprintln!("kmer_depth\thet_kmer_density\tcontig_id\tcontig_name\tcontig_length\tcontig_classification\tsex_contig_cov_cutoff\tsex_density_cutoff");
     for (depth, density, contig) in densities.iter() {
         let mut sex = "autosomal";
         if *depth < params.sex_contig_cov_cutoff * avg_cov 
@@ -409,7 +408,7 @@ fn detect_sex_contigs(assembly: &Assembly, params: &Params) -> HashSet<i32> {
                 sex_contigs.insert(*contig as i32);
             sex = "sex";
         }
-        eprintln!("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}", depth, density, contig, 
+        //eprintln!("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}", depth, density, contig, 
             assembly.contig_names[*contig as usize], 
             assembly.contig_sizes.get(&(*contig as i32)).unwrap(), 
             sex,  params.sex_contig_cov_cutoff * avg_cov, 
