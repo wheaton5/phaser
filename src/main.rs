@@ -229,6 +229,7 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, sex_contigs: HashSe
                                 }
                                 
                             }
+                            break;
                         }
                     }
                 }
