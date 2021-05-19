@@ -410,10 +410,10 @@ fn detect_sex_contigs(assembly: &Assembly, params: &Params) -> HashSet<i32> {
             sex = "sex";
         }
         //eprintln!("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}", depth, density, contig, 
-            assembly.contig_names[*contig as usize], 
-            assembly.contig_sizes.get(&(*contig as i32)).unwrap(), 
-            sex,  params.sex_contig_cov_cutoff * avg_cov, 
-            params.sex_contig_het_kmer_density_cutoff * avg_density);
+        //    assembly.contig_names[*contig as usize], 
+        //    assembly.contig_sizes.get(&(*contig as i32)).unwrap(), 
+        //    sex,  params.sex_contig_cov_cutoff * avg_cov, 
+        //    params.sex_contig_het_kmer_density_cutoff * avg_density);
 
     }
     sex_contigs
