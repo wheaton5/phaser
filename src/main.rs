@@ -145,7 +145,7 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, sex_contigs: HashSe
     let pairwise_consistencies: HashMap<(i32, i32), [u8;4]> = get_pairwise_consistencies(&ccs_mols);
 
     // count kmer consistencies to make sure we seed on good kmers
-    let pairwise_kmer_consistency_counts: HashMap<i32, u32> = count_kmer_consistencies(&pairwise_consistencies);
+    let pairwise_kmer_consistency_counts: HashMap<i32, u32> = count_kmer_consistencies(&pairwise_consistencies, &params);
     
     // get average consistency counts
     let (_mean_phasing_consistency, _sd_phasing_consistency, min_seed_consistency, max_seed_consistency) = 
@@ -176,6 +176,23 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, sex_contigs: HashSe
                 let mut kmer_phasing_consistency_counts: HashMap<i32, [u8; 4]> = HashMap::new();
                 if let Some(seed_index) = deferred_seed {
                     // going backwards TODO
+                    eprintln!("continuing backwards at seed index {}", seed_index);
+                    for index in (0..seed_index).rev() { // going backwards
+                        let (_position, kmer) = kmer_positions[index];
+                        let canonical_kmer = Kmers::canonical_pair(kmer);
+                        if let Some(counts) = kmer_phasing_consistency_counts.get(&canonical_kmer) {
+                            let consistency = is_phasing_consistent(counts, &thresholds);
+                            eprintln!("backwards kmer {}, index {}, counts {:?}, consistency {:?}", canonical_kmer, index, counts, consistency);
+                            if consistency.is_consistent {
+                                putative_phasing[index] = Some(consistency.cis);
+                                add_kmer_and_update_phasing_consistency_counts(&mut kmer_phasing_consistency_counts, 
+                                    canonical_kmer, consistency.cis, &ccs_kmer_mols, &ccs_mols, &mut used_ccs_mols);
+                                seeder.consume(index);
+                            }
+                        } else {
+                            eprintln!("backwards kmer {}, index {}, NOCOUNTS", canonical_kmer, index);
+                        }
+                    }
                     break 'outer_loop;
                 } else {
                     // going forwards, get new good seed
@@ -186,8 +203,10 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, sex_contigs: HashSe
 
                         if !(kmer_consistency > min_seed_consistency && kmer_consistency < max_seed_consistency) {
                             seeder.backtrack();
+                            eprintln!("bad seed with {:?}", kmer_consistency);
                             continue;
                         } else {
+                            eprintln!("found good seed {} with {:?} at seed index {}", canonical_kmer, kmer_consistency, seed_index);
                             deferred_seed = Some(seed_index); // start back here when done going forward
                             putative_phasing[seed_index] = Some(true);
 
@@ -198,13 +217,17 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, sex_contigs: HashSe
                                 let canonical_kmer = Kmers::canonical_pair(kmer);
                                 if let Some(counts) = kmer_phasing_consistency_counts.get(&canonical_kmer) {
                                     let consistency = is_phasing_consistent(counts, &thresholds);
+                                    eprintln!("forwards kmer {}, index {}, counts {:?}, consistency {:?}", canonical_kmer, index, counts, consistency);
                                     if consistency.is_consistent {
                                         putative_phasing[index] = Some(consistency.cis);
                                         add_kmer_and_update_phasing_consistency_counts(&mut kmer_phasing_consistency_counts, 
                                             canonical_kmer, consistency.cis, &ccs_kmer_mols, &ccs_mols, &mut used_ccs_mols);
                                         seeder.consume(index);
                                     }
+                                } else {
+                                    eprintln!("backwards kmer {}, index {}, NOCOUNTS", canonical_kmer, index);
                                 }
+                                
                             }
                         }
                     }
@@ -240,7 +263,7 @@ fn add_kmer_and_update_phasing_consistency_counts(kmer_phasing_consistency_count
             continue;
         }
         for new_kmer in mols.get_molecule_kmers(*moldex) {
-            let counts = kmer_phasing_consistency_counts.entry(Kmers::canonical_pair(*new_kmer)).or_insert([0;4]);
+            let mut counts = kmer_phasing_consistency_counts.entry(Kmers::canonical_pair(*new_kmer)).or_insert([0;4]);
             increment_consistency_counts(cis, *new_kmer, &mut counts);
         }
         used.insert(*moldex);
@@ -250,7 +273,7 @@ fn add_kmer_and_update_phasing_consistency_counts(kmer_phasing_consistency_count
             continue;
         }
         for new_kmer in mols.get_molecule_kmers(*moldex) {
-            let counts = kmer_phasing_consistency_counts.entry(Kmers::canonical_pair(*new_kmer)).or_insert([0;4]);
+            let mut counts = kmer_phasing_consistency_counts.entry(Kmers::canonical_pair(*new_kmer)).or_insert([0;4]);
             increment_consistency_counts(!cis, *new_kmer, &mut counts);
         }
         used.insert(*moldex);
@@ -318,7 +341,7 @@ impl RandSeeder {
     }
 }
 
-
+#[derive(Debug)]
 struct PhasingConsistency {
     is_consistent: bool,
     cis: bool,
