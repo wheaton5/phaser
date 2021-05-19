@@ -312,9 +312,9 @@ impl RandSeeder {
     fn consume(&mut self, index: usize) {
         let shuffled_index = self.reverse_index.get(&index).expect("please don't");
         let tmp = self.shuffled_vec[*shuffled_index];
-        self.shuffled_vec[*shuffled_index] = self.shuffled_vec[self.vec_size-1];
-        self.shuffled_vec[self.vec_size-1] = tmp;
         self.vec_size -= 1;
+        self.shuffled_vec[*shuffled_index] = self.shuffled_vec[self.vec_size];
+        self.shuffled_vec[self.vec_size] = tmp;
     } 
 
     fn next(&mut self) -> Option<usize> {
