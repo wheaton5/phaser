@@ -207,7 +207,7 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, sex_contigs: HashSe
                             continue;
                         } else {
                             eprintln!("found good seed {} with {:?} at seed index {}", canonical_kmer, kmer_consistency, seed_index);
-                            deferred_seed = Some(seed_index); // start back here when done going forward
+                            deferred_seed = Some(seed_index.clone()); // start back here when done going forward
                             putative_phasing[seed_index] = Some(true);
 
                             add_kmer_and_update_phasing_consistency_counts(&mut kmer_phasing_consistency_counts, 
