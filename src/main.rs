@@ -164,6 +164,21 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, sex_contigs: HashSe
 
         //let mut possible_positions: HashSet<usize> = HashSet::new();
         let kmer_positions = assembly.contig_kmers.get(&(contig as i32)).expect("please no");
+
+
+        //DEBUG
+        let mut kmer_to_index: HashMap<i32, usize> = HashMap::new();
+        for (index, (pos, kmer)) in kmer_positions.iter().enumerate() {
+            kmer_to_index.insert(Kmers::canonical_pair(*kmer), index);
+        }
+        //DEBUG \end
+
+
+
+
+
+
+
         for _ in 0..kmer_positions.len() { // fill in phasings with unphased and we will come back and put in phasings as we... phase
             putative_phasing.push(None);
         }
@@ -186,7 +201,7 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, sex_contigs: HashSe
                             if consistency.is_consistent {
                                 putative_phasing[index] = Some(consistency.cis);
                                 add_kmer_and_update_phasing_consistency_counts(&mut kmer_phasing_consistency_counts, 
-                                    canonical_kmer, consistency.cis, &ccs_kmer_mols, &ccs_mols, &mut used_ccs_mols);
+                                    canonical_kmer, consistency.cis, &ccs_kmer_mols, &ccs_mols, &mut used_ccs_mols, &kmer_to_index);
                                 seeder.consume(index);
                             }
                         } else {
@@ -211,7 +226,7 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, sex_contigs: HashSe
                             putative_phasing[seed_index] = Some(true);
 
                             add_kmer_and_update_phasing_consistency_counts(&mut kmer_phasing_consistency_counts, 
-                                canonical_kmer, true, &ccs_kmer_mols, &ccs_mols, &mut used_ccs_mols);
+                                canonical_kmer, true, &ccs_kmer_mols, &ccs_mols, &mut used_ccs_mols, &kmer_to_index);
                             for index in (seed_index+1)..kmer_positions.len() { // going forward
                                 let (_position, kmer) = kmer_positions[index];
                                 let canonical_kmer = Kmers::canonical_pair(kmer);
@@ -221,11 +236,11 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, sex_contigs: HashSe
                                     if consistency.is_consistent {
                                         putative_phasing[index] = Some(consistency.cis);
                                         add_kmer_and_update_phasing_consistency_counts(&mut kmer_phasing_consistency_counts, 
-                                            canonical_kmer, consistency.cis, &ccs_kmer_mols, &ccs_mols, &mut used_ccs_mols);
+                                            canonical_kmer, consistency.cis, &ccs_kmer_mols, &ccs_mols, &mut used_ccs_mols, &kmer_to_index);
                                         seeder.consume(index);
                                     }
                                 } else {
-                                    eprintln!("backwards kmer {}, index {}, NOCOUNTS", canonical_kmer, index);
+                                    eprintln!("forwards kmer {}, index {}, NOCOUNTS", canonical_kmer, index);
                                 }
                                 
                             }
@@ -258,24 +273,43 @@ fn increment_consistency_counts(x: bool, y: i32, counts: &mut [u8;4]) {
     }
 }
 
-fn add_kmer_and_update_phasing_consistency_counts(kmer_phasing_consistency_counts: &mut HashMap<i32, [u8;4]>, kmer: i32, cis: bool, kmer_mols: &KmerMols, mols: &Mols, used: &mut BitSet) {
+fn add_kmer_and_update_phasing_consistency_counts(kmer_phasing_consistency_counts: &mut HashMap<i32, [u8;4]>, 
+    kmer: i32, cis: bool, kmer_mols: &KmerMols, mols: &Mols, used: &mut BitSet, kmer_to_index: &HashMap<i32, usize>) {
+    eprintln!("adding kmer {}", kmer);
     for moldex in kmer_mols.get_mols(kmer.abs()) { // loop over molecules which have kmer then loop over molecules that have the pair
         if used.contains(*moldex) {
             continue;
         }
+        let mut cistrans = "cis";
+        if !cis {
+            cistrans = "trans";
+        }
+        eprintln!("\tupdating for moldex {} in {}", moldex, cistrans);
         for new_kmer in mols.get_molecule_kmers(*moldex) {
             let mut counts = kmer_phasing_consistency_counts.entry(Kmers::canonical_pair(*new_kmer)).or_insert([0;4]);
+            let kmer_index = kmer_to_index.get(&Kmers::canonical_pair(*new_kmer)).unwrap_or(&0);
+            eprintln!("\t\tbefore counts kmer {} index on contig {} in {}", new_kmer, kmer_index, cis);
             increment_consistency_counts(cis, *new_kmer, &mut counts);
+            eprintln!("\t\tafter counts kmer {} index on contig {} in {}", new_kmer, kmer_index, cis);
+
         }
         used.insert(*moldex);
     }
     for moldex in kmer_mols.get_mols(Kmers::pair(kmer.abs())) {
-         if used.contains(*moldex) {
+        if used.contains(*moldex) {
             continue;
         }
+        let mut cistrans = "cis";
+        if !cis {
+            cistrans = "trans";
+        }
+        eprintln!("\tupdating for moldex {} in {}", moldex, cistrans);
         for new_kmer in mols.get_molecule_kmers(*moldex) {
             let mut counts = kmer_phasing_consistency_counts.entry(Kmers::canonical_pair(*new_kmer)).or_insert([0;4]);
+            let kmer_index = kmer_to_index.get(&Kmers::canonical_pair(*new_kmer)).unwrap_or(&0);
+            eprintln!("\t\tbefore counts kmer {} index on contig {} in {}", new_kmer, kmer_index, cis);
             increment_consistency_counts(!cis, *new_kmer, &mut counts);
+            eprintln!("\t\tafter counts kmer {} index on contig {} in {}", new_kmer, kmer_index, cis);
         }
         used.insert(*moldex);
     }
