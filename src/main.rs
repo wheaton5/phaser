@@ -288,9 +288,15 @@ fn add_kmer_and_update_phasing_consistency_counts(kmer_phasing_consistency_count
         for new_kmer in mols.get_molecule_kmers(*moldex) {
             let mut counts = kmer_phasing_consistency_counts.entry(Kmers::canonical_pair(*new_kmer)).or_insert([0;4]);
             let kmer_index = kmer_to_index.get(&Kmers::canonical_pair(*new_kmer)).unwrap_or(&0);
-            eprintln!("\t\tbefore counts kmer {} index on contig {} in {} = {:?}", new_kmer, kmer_index, cis, counts);
+            if *kmer_index < 62263 {
+                eprintln!("\t\tbefore counts kmer {} index on contig {} in {} = {:?}", new_kmer, kmer_index, cis, counts);
+            }
+            
             increment_consistency_counts(cis, *new_kmer, &mut counts);
-            eprintln!("\t\tafter counts kmer {} index on contig {} in {} = {:?}", new_kmer, kmer_index, cis, counts);
+            if *kmer_index < 62263 {
+                eprintln!("\t\tafter counts kmer {} index on contig {} in {} = {:?}", new_kmer, kmer_index, cis, counts);
+            }   
+            
 
         }
         used.insert(*moldex);
@@ -308,9 +314,15 @@ fn add_kmer_and_update_phasing_consistency_counts(kmer_phasing_consistency_count
         for new_kmer in mols.get_molecule_kmers(*moldex) {
             let mut counts = kmer_phasing_consistency_counts.entry(Kmers::canonical_pair(*new_kmer)).or_insert([0;4]);
             let kmer_index = kmer_to_index.get(&Kmers::canonical_pair(*new_kmer)).unwrap_or(&0);
-            eprintln!("\t\tbefore counts kmer {} index on contig {} in {} = {:?}", new_kmer, kmer_index, !cis, counts);
+            if *kmer_index < 62263 {
+                eprintln!("\t\tbefore counts kmer {} index on contig {} in {} = {:?}", new_kmer, kmer_index, !cis, counts);
+            }
+            
             increment_consistency_counts(!cis, *new_kmer, &mut counts);
-            eprintln!("\t\tafter counts kmer {} index on contig {} in {} = {:?}", new_kmer, kmer_index, !cis, counts);
+            if *kmer_index < 62263 {
+                eprintln!("\t\tafter counts kmer {} index on contig {} in {} = {:?}", new_kmer, kmer_index, !cis, counts);
+            }
+            
         }
         used.insert(*moldex);
     }
