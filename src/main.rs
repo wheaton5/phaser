@@ -261,7 +261,7 @@ struct PhasingConsistencyThresholds {
 }
 
 fn increment_consistency_counts(x: bool, y: i32, counts: &mut [u8;4]) {
-    let new_thingy = y.abs() % 2 == 0;
+    let new_thingy = y.abs() % 2 == 1;
     if x && new_thingy {
         counts[0] += 1;
     } else if !x && !new_thingy {
