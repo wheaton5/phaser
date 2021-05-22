@@ -275,53 +275,53 @@ fn increment_consistency_counts(x: bool, y: i32, counts: &mut [u8;4]) {
 
 fn add_kmer_and_update_phasing_consistency_counts(kmer_phasing_consistency_counts: &mut HashMap<i32, [u8;4]>, 
     kmer: i32, cis: bool, kmer_mols: &KmerMols, mols: &Mols, used: &mut BitSet, kmer_to_index: &HashMap<i32, usize>) {
-    eprintln!("adding kmer {} in {}", kmer.abs(), cis);
+    //eprintln!("adding kmer {} in {}", kmer.abs(), cis);
     for moldex in kmer_mols.get_mols(kmer.abs()) { // loop over molecules which have kmer then loop over molecules that have the pair
         if used.contains(*moldex) {
             continue;
         }
-        let mut cistrans = "cis";
-        if !cis {
-            cistrans = "trans";
-        }
-        eprintln!("\tupdating for moldex {} in {}", moldex, cistrans);
+        //let mut cistrans = "cis";
+        //if !cis {
+        //    cistrans = "trans";
+        //}
+        //eprintln!("\tupdating for moldex {} in {}", moldex, cistrans);
         for new_kmer in mols.get_molecule_kmers(*moldex) {
             let mut counts = kmer_phasing_consistency_counts.entry(Kmers::canonical_pair(*new_kmer)).or_insert([0;4]);
-            let kmer_index = kmer_to_index.get(&Kmers::canonical_pair(*new_kmer)).unwrap_or(&0);
-            if *kmer_index < 62263 {
-                eprintln!("\t\tbefore counts kmer {} index on contig {} in {} = {:?}", new_kmer, kmer_index, cis, counts);
-            }
+            //let kmer_index = kmer_to_index.get(&Kmers::canonical_pair(*new_kmer)).unwrap_or(&0);
+            //if *kmer_index < 62263 {
+            //    eprintln!("\t\tbefore counts kmer {} index on contig {} in {} = {:?}", new_kmer, kmer_index, cis, counts);
+            //}
             
             increment_consistency_counts(cis, *new_kmer, &mut counts);
-            if *kmer_index < 62263 {
-                eprintln!("\t\tafter counts kmer {} index on contig {} in {} = {:?}", new_kmer, kmer_index, cis, counts);
-            }   
+            //if *kmer_index < 62263 {
+            //    eprintln!("\t\tafter counts kmer {} index on contig {} in {} = {:?}", new_kmer, kmer_index, cis, counts);
+            //}   
             
 
         }
         used.insert(*moldex);
     }
-    eprintln!("adding pair of kmer {} which is {} in {}", kmer.abs(), Kmers::pair(kmer.abs()), !cis);
+    //eprintln!("adding pair of kmer {} which is {} in {}", kmer.abs(), Kmers::pair(kmer.abs()), !cis);
     for moldex in kmer_mols.get_mols(Kmers::pair(kmer.abs())) {
         if used.contains(*moldex) {
             continue;
         }
-        let mut cistrans = "cis";
-        if cis {
-            cistrans = "trans";
-        }
-        eprintln!("\tupdating for moldex {} in {}", moldex, cistrans);
+        //let mut cistrans = "cis";
+        //if cis {
+        //    cistrans = "trans";
+        //}
+        //eprintln!("\tupdating for moldex {} in {}", moldex, cistrans);
         for new_kmer in mols.get_molecule_kmers(*moldex) {
             let mut counts = kmer_phasing_consistency_counts.entry(Kmers::canonical_pair(*new_kmer)).or_insert([0;4]);
-            let kmer_index = kmer_to_index.get(&Kmers::canonical_pair(*new_kmer)).unwrap_or(&0);
-            if *kmer_index < 62263 {
-                eprintln!("\t\tbefore counts kmer {} index on contig {} in {} = {:?}", new_kmer, kmer_index, !cis, counts);
-            }
+            //let kmer_index = kmer_to_index.get(&Kmers::canonical_pair(*new_kmer)).unwrap_or(&0);
+            //if *kmer_index < 62263 {
+            //    eprintln!("\t\tbefore counts kmer {} index on contig {} in {} = {:?}", new_kmer, kmer_index, !cis, counts);
+            //}
             
             increment_consistency_counts(!cis, *new_kmer, &mut counts);
-            if *kmer_index < 62263 {
-                eprintln!("\t\tafter counts kmer {} index on contig {} in {} = {:?}", new_kmer, kmer_index, !cis, counts);
-            }
+            //if *kmer_index < 62263 {
+            //    eprintln!("\t\tafter counts kmer {} index on contig {} in {} = {:?}", new_kmer, kmer_index, !cis, counts);
+            //}
             
         }
         used.insert(*moldex);
