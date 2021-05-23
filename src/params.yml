@@ -107,4 +107,9 @@ args:
         required: false
         help: window of snps used to determine if contig should be split (default 100)
         takes_value: true
+    - max_linked_read_dist:
+        long: max_linked_read_dist
+        required: false
+        help: maximum distance to count two kmers in the same linked read barcode as part of the same molecule (default 150kb)
+        takes_value: true
         
