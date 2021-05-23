@@ -168,6 +168,8 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
             putative_phasing.push(None);
         }
 
+        eprintln!("phasing contig {} with {} kmer positions", contig, kmer_positions.len());
+
         let mut phase_blocks: Vec<(usize, usize)> = Vec::new();
         
         let mut kmer_to_index: HashMap<i32, usize> = HashMap::new();
