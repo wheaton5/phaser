@@ -177,12 +177,6 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
             kmer_to_index.insert(Kmers::canonical_pair(*kmer), index);
         }
 
-
-
-
-
-
-
         
         let mut seeder: RandSeeder = RandSeeder::new(kmer_positions.len());
         let mut used_ccs_mols: BitSet = BitSet::new();
@@ -196,6 +190,7 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                     // going backwards TODO
                     eprintln!("continuing backwards at seed index {}", seed_index);
                     for index in (0..seed_index).rev() { // going backwards
+                        eprintln!("backwards index {}", index);
                         let (position, kmer) = kmer_positions[index];
                         let canonical_kmer = Kmers::canonical_pair(kmer);
                         if let Some(counts) = kmer_phasing_consistency_counts.get(&canonical_kmer) {
@@ -263,6 +258,7 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                                     }
                                     
                                 }
+                                eprintln!("end of contig");
                                 break;
                             }
                     }
@@ -304,8 +300,12 @@ fn add_kmer_and_update_phasing_consistency_counts(kmer_phasing_consistency_count
             let canonical_kmer = Kmers::canonical_pair(*new_kmer);
             let mut counts = kmer_phasing_consistency_counts.entry(canonical_kmer).or_insert([0;4]);
             let index = kmer_to_index.get(&canonical_kmer).unwrap_or(&0);
+            
             let new_position = kmer_positions[*index].0 as i32;
-            if (new_position - current_position as i32).abs() < max_distance as i32 {
+            if new_position < current_position as i32{
+                eprintln!("do we ever add things backwards? index {}, current_position {} position {}", index, current_position, new_position);
+            }
+            if (new_position - (current_position as i32)).abs() < max_distance as i32 {
                 increment_consistency_counts(cis, *new_kmer, &mut counts);
             }
             
@@ -321,7 +321,10 @@ fn add_kmer_and_update_phasing_consistency_counts(kmer_phasing_consistency_count
             let mut counts = kmer_phasing_consistency_counts.entry(canonical_kmer).or_insert([0;4]);
             let index = kmer_to_index.get(&canonical_kmer).unwrap_or(&0);
             let new_position = kmer_positions[*index].0 as i32;
-            if (new_position - current_position as i32).abs() < max_distance as i32 {
+            if new_position < current_position as i32{
+                eprintln!("do we ever add things backwards? index {}, current_position {} position {}", index, current_position, new_position);
+            }
+            if (new_position - (current_position as i32)).abs() < max_distance as i32 {
                 increment_consistency_counts(!cis, *new_kmer, &mut counts);
             }
             
