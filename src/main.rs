@@ -139,7 +139,7 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
     eprintln!("phasing");
     let hic_kmer_mols = hic_mols.get_kmer_mols();
     let ccs_kmer_mols = ccs_mols.get_kmer_mols();
-    let txg_kmer_mols = txg_mols.get_canonical_kmer_mols();
+    let txg_kmer_mols = txg_mols.get_kmer_mols();
 
 
     let pairwise_consistencies: HashMap<(i32, i32), [u8;4]> = get_pairwise_consistencies(&ccs_mols);
@@ -268,13 +268,13 @@ struct PhasingConsistencyThresholds {
     minor_allele_fraction: f32,
 }
 
-fn increment_consistency_counts(x: bool, y: i32, counts: &mut [u8;4]) {
-    let new_thingy = y.abs() % 2 == 1;
-    if x && new_thingy {
+fn increment_consistency_counts(phase: bool, allele: i32, counts: &mut [u8;4]) {
+    let allele = allele.abs() % 2 == 1;
+    if phase && allele {
         counts[0] += 1;
-    } else if !x && !new_thingy {
+    } else if !phase && !allele { 
         counts[1] += 1;
-    } else if x && !new_thingy {
+    } else if phase && !allele {
         counts[2] += 1;
     } else {
         counts[3] += 1;
