@@ -182,10 +182,10 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
         let mut used_ccs_mols: BitSet = BitSet::new();
         let mut used_txg_mols: BitSet = BitSet::new();
         let mut deferred_seed: Option<usize> = None;
-
+        
+        let mut kmer_phasing_consistency_counts: HashMap<i32, [u8; 4]> = HashMap::new();
         'outer_loop:
             loop {
-                let mut kmer_phasing_consistency_counts: HashMap<i32, [u8; 4]> = HashMap::new();
                 if let Some(seed_index) = deferred_seed {
                     // going backwards TODO
                     eprintln!("continuing backwards at seed index {}", seed_index);
@@ -306,7 +306,11 @@ fn add_kmer_and_update_phasing_consistency_counts(kmer_phasing_consistency_count
                 eprintln!("do we ever add things backwards? index {}, current_position {} position {}", index, current_position, new_position);
             }
             if (new_position - (current_position as i32)).abs() < max_distance as i32 {
+                
                 increment_consistency_counts(cis, *new_kmer, &mut counts);
+                if new_position < current_position as i32{
+                    eprintln!("yes we do, counts {:?}", counts);
+                }
             }
             
         }
@@ -326,6 +330,9 @@ fn add_kmer_and_update_phasing_consistency_counts(kmer_phasing_consistency_count
             }
             if (new_position - (current_position as i32)).abs() < max_distance as i32 {
                 increment_consistency_counts(!cis, *new_kmer, &mut counts);
+                if new_position < current_position as i32{
+                    eprintln!("yes we do, counts {:?}", counts);
+                }
             }
             
         }
