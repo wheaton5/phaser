@@ -204,9 +204,10 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                                     canonical_kmer, consistency.cis, &ccs_kmer_mols, &ccs_mols, &mut used_ccs_mols, &kmer_to_index, &kmer_positions, position, params.max_linked_read_dist);
                                 add_kmer_and_update_phasing_consistency_counts(&mut kmer_phasing_consistency_counts, 
                                     canonical_kmer, consistency.cis, &txg_kmer_mols, &txg_mols, &mut used_txg_mols, &kmer_to_index, &kmer_positions, position, params.max_linked_read_dist);
-                                seeder.consume(index);
                             }
+                            seeder.consume(index);
                         } else {
+                            seeder.consume(index);
                             let current_phase_block = phase_blocks.len() - 1;
                             phase_blocks[current_phase_block].0 = index - 1;
                             eprintln!("backwards kmer {}, index {}, NOCOUNTS", canonical_kmer, index);
@@ -254,6 +255,7 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                                         seeder.consume(index);
 
                                     } else {
+                                        seeder.consume(index);
                                         eprintln!("forwards kmer {}, index {}, NOCOUNTS", canonical_kmer, index);
                                         let current_phase_block = phase_blocks.len() - 1;
                                         phase_blocks[current_phase_block].1 = index - 1;
