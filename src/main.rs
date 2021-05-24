@@ -220,6 +220,7 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                     // going forwards, get new good seed
                     'seed_loop:
                         while let Some(seed_index) = seeder.next() {
+                            seeder.consume(seed_index);
                             let (position, kmer) = kmer_positions[seed_index]; // position is base position, index is the... index
                             let canonical_kmer = Kmers::canonical_pair(kmer.abs());
                             let kmer_consistency = *pairwise_kmer_consistency_counts.get(&canonical_kmer).unwrap_or(&0) as f32;
@@ -266,12 +267,88 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                                 eprintln!("end of contig");
                                 break;
                             }
+                    } // end forward seed loop
+                } // end forward/backward conditional 
+            } // end phase block loop
+
+        let phase_block_consistencies = get_phase_block_consistencies(&phase_blocks, &putative_phasing, &kmer_positions, &hic_mols, &hic_kmer_mols);
+
+    } // end contig loop 
+
+}
+
+fn get_phase_block_consistencies(phase_blocks: &Vec<(usize, usize)>, putative_phasing: &Vec<Option<bool>>, 
+    kmer_positions: &Vec<(usize, i32)>, hic_mols: &Mols, hic_kmer_mols: &KmerMols) -> HashMap<(usize, usize), [u8; 4]> {
+    let mut phase_block_consistencies: HashMap<(usize, usize), [u8; 4]> = HashMap::new();
+
+    let mut block_kmer_phasings: HashMap<usize, HashMap<i32, bool>> = HashMap::new();
+    for (block_id, (start, end)) in phase_blocks.iter().enumerate() {
+        let kmer_phasings = block_kmer_phasings.entry(block_id).or_insert(HashMap::new());
+        for index in *start..*end {
+            let (_pos, kmer) = kmer_positions[index];
+            let canonical_kmer = Kmers::canonical_pair(kmer);
+            if let Some(phase) = putative_phasing[index] {
+                kmer_phasings.insert(canonical_kmer, phase);
+            }
+        }
+    }
+
+
+
+    for phase_block1 in 0..phase_blocks.len() {
+        let (start1, end1) = phase_blocks[phase_block1];
+        let block1_phasing = block_kmer_phasings.get(&phase_block1).unwrap();
+        for phase_block2 in (phase_block1 + 1)..phase_blocks.len() {
+            //let (start2, end2) = phase_blocks[phase_block2];
+            let block2_phasing = block_kmer_phasings.get(&phase_block2).unwrap();
+            for (kmer1, phase1) in block1_phasing.iter() {
+                let mut phase1 = *phase1;
+                for mol in hic_kmer_mols.get_mols(*kmer1) {
+                    for kmer2 in hic_mols.get_molecule_kmers(*mol) {
+                        if let Some(phase2) = block2_phasing.get(kmer2) {
+                            let mut phase2 = *phase2;
+                            if kmer2 % 2 == 0 {
+                                phase2 = !phase2;
+                            }
+                            let counts = phase_block_consistencies.entry((phase_block1, phase_block2)).or_insert([0;4]);
+                            if phase1 && phase2 {
+                                counts[0] += 1;
+                            } else if !phase1 && !phase2 {
+                                counts[1] += 1;
+                            } else if phase1 && !phase2 {
+                                counts[2] += 1;
+                            } else {
+                                counts[3] += 1;
+                            }
+                        }
+                    }
+                }
+                for mol in hic_kmer_mols.get_mols(Kmers::pair(*kmer1)) {
+                    let phase1 = !phase1;
+                    for kmer2 in hic_mols.get_molecule_kmers(*mol) {
+                        if let Some(phase2) = block2_phasing.get(kmer2) {
+                            let mut phase2 = *phase2;
+                            if kmer2 % 2 == 0 {
+                                phase2 = !phase2;
+                            }
+                            let counts = phase_block_consistencies.entry((phase_block1, phase_block2)).or_insert([0;4]);
+                            if phase1 && phase2 {
+                                counts[0] += 1;
+                            } else if !phase1 && !phase2 {
+                                counts[1] += 1;
+                            } else if phase1 && !phase2 {
+                                counts[2] += 1;
+                            } else {
+                                counts[3] += 1;
+                            }
+                        }
                     }
                 }
             }
-  
+        }
     }
 
+    phase_block_consistencies
 }
 
 struct PhasingConsistencyThresholds {
@@ -338,6 +415,7 @@ fn add_kmer_and_update_phasing_consistency_counts(kmer_phasing_consistency_count
 struct RandSeeder {
     seeded_rng: StdRng,
     shuffled_vec: Vec<usize>,
+    used: BitSet,
     vec_size: usize, // as we use up positions in the phasing process, we will move them to the end and shrink the vec_size
     current_position: usize, // current_position in shuffled_vec
     reverse_index: HashMap<usize, usize>, // map from position index to index in shuffled_vec so we can 
@@ -355,6 +433,7 @@ impl RandSeeder {
         }
         shuffled_vec.shuffle(&mut rng);
         RandSeeder {
+            used: BitSet::new(),
             seeded_rng: rng,
             shuffled_vec: shuffled_vec,
             vec_size: size,
@@ -365,6 +444,7 @@ impl RandSeeder {
 
 
     fn consume(&mut self, index: usize) {
+        /*
         let shuffled_index = *self.reverse_index.get(&index).expect("please don't");
         let tmp = self.shuffled_vec[shuffled_index];
         if shuffled_index < self.vec_size {
@@ -374,30 +454,31 @@ impl RandSeeder {
         self.reverse_index.insert(self.shuffled_vec[shuffled_index], shuffled_index);
         self.shuffled_vec[self.vec_size] = tmp;
         self.reverse_index.insert(self.shuffled_vec[self.vec_size], self.vec_size);
+        */
+        self.used.insert(index);
     } 
 
     fn next(&mut self) -> Option<usize> {
-        self.current_position += 1;
+        
+        while self.current_position < self.shuffled_vec.len() {
+            let index = self.shuffled_vec[self.current_position];
+            self.current_position += 1;
+            if self.used.contains(index) {
+                continue;
+            }
+            return Some(index);
+        }
+        None
+        /*
         if self.current_position >= self.vec_size {
             return None
         } else {
             Some(self.shuffled_vec[self.current_position - 1])
         }
+        */
     }
 
-    fn backtrack(&mut self) -> bool {
-        if self.current_position > 0 {
-            return false
-        }
-        self.current_position -= 1;
-        let tmp = self.shuffled_vec[self.current_position];
-        let pos = self.seeded_rng.gen_range(self.current_position + 1, self.vec_size);
-        self.reverse_index.insert(tmp, pos);
-        self.reverse_index.insert(self.shuffled_vec[pos], self.current_position);
-        self.shuffled_vec[self.current_position] = self.shuffled_vec[pos];
-        self.shuffled_vec[pos] = tmp;
-        return true
-    }
+    
 }
 
 #[derive(Debug)]
