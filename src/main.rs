@@ -455,7 +455,9 @@ impl RandSeeder {
         self.shuffled_vec[self.vec_size] = tmp;
         self.reverse_index.insert(self.shuffled_vec[self.vec_size], self.vec_size);
         */
+       
         self.used.insert(index);
+         eprintln!("consumed {} checking {}", index,self.used.contains(index));
     } 
 
     fn next(&mut self) -> Option<usize> {
@@ -466,6 +468,7 @@ impl RandSeeder {
             if self.used.contains(index) {
                 continue;
             }
+            eprintln!("returning Some({}) and is it in used? {}", index, self.used.contains(index));
             return Some(index);
         }
         None
