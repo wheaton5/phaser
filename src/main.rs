@@ -303,12 +303,12 @@ fn add_kmer_and_update_phasing_consistency_counts(kmer_phasing_consistency_count
         }
         for new_kmer in mols.get_molecule_kmers(*moldex) {
             let canonical_kmer = Kmers::canonical_pair(*new_kmer);
-            let mut counts = kmer_phasing_consistency_counts.entry(canonical_kmer).or_insert([0;4]);
+            
             let index = kmer_to_index.get(&canonical_kmer).unwrap_or(&0);
             
             let new_position = kmer_positions[*index].0 as i32;
             if (new_position - (current_position as i32)).abs() < max_distance as i32 {
-                
+                let mut counts = kmer_phasing_consistency_counts.entry(canonical_kmer).or_insert([0;4]);
                 increment_consistency_counts(cis, *new_kmer, &mut counts);
             }
             
@@ -321,10 +321,11 @@ fn add_kmer_and_update_phasing_consistency_counts(kmer_phasing_consistency_count
         }
         for new_kmer in mols.get_molecule_kmers(*moldex) {
             let canonical_kmer = Kmers::canonical_pair(*new_kmer);
-            let mut counts = kmer_phasing_consistency_counts.entry(canonical_kmer).or_insert([0;4]);
+            
             let index = kmer_to_index.get(&canonical_kmer).unwrap_or(&0);
             let new_position = kmer_positions[*index].0 as i32;
             if (new_position - (current_position as i32)).abs() < max_distance as i32 {
+                let mut counts = kmer_phasing_consistency_counts.entry(canonical_kmer).or_insert([0;4]);
                 increment_consistency_counts(!cis, *new_kmer, &mut counts);
             }
             
