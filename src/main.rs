@@ -242,8 +242,10 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                 eprintln!("backwards end index {}", last_index);
             } else {
                 // going forwards, get new good seed
+                let mut any = false;
                 'seed_loop:
                     while let Some(seed_index) = seeder.next() {
+                        any = true;
                         seeder.consume(seed_index);
                         let (position, kmer) = kmer_positions[seed_index]; // position is base position, index is the... index
                         let canonical_kmer = Kmers::canonical_pair(kmer.abs());
@@ -311,11 +313,15 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                                 
                             }
                             eprintln!("end of contig");
-                            break;
+                            break 'seed_loop;
                         }
                 } // end forward seed loop
                 // no more seeds
-                break 'outer_loop;
+                if ! any {
+                    eprintln!("no more seeds, done with contig");
+                    break 'outer_loop;
+                }
+                
             } // end forward/backward conditional 
         } // end phase block loop
 
