@@ -299,7 +299,7 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                                             canonical_kmer, consistency.cis, &ccs_kmer_mols, &ccs_mols, &mut used_ccs_mols, &kmer_to_index, &kmer_positions, position, params.max_linked_read_dist);
                                         add_kmer_and_update_phasing_consistency_counts(&mut kmer_phasing_consistency_counts, 
                                             canonical_kmer, consistency.cis, &txg_kmer_mols, &txg_mols, &mut used_txg_mols, &kmer_to_index, &kmer_positions, position, params.max_linked_read_dist);
-                                        current_phase_block_start = index;
+                                        current_phase_block_end = index;
                                     }
                                     seeder.consume(index);
 
