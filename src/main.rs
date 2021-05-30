@@ -164,13 +164,18 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
         //let mut possible_positions: HashSet<usize> = HashSet::new();
         let kmer_positions = assembly.contig_kmers.get(&(contig as i32)).expect("please no");
         let mut putative_phasing: Vec<Option<bool>> = Vec::new();
-        for _ in 0..kmer_positions.len() { // fill in phasings with unphased and we will come back and put in phasings as we... phase
-            putative_phasing.push(None);
-        }
+        
 
         eprintln!("phasing contig {} with {} kmer positions", contig, kmer_positions.len());
 
-        let mut phase_blocks: Vec<(usize, usize)> = Vec::new();
+        let mut phase_blocks: HashMap<usize, (usize, usize)> = HashMap::new(); // map of phase block id to start, stop
+        let mut current_phase_block_id: usize = 0;
+        let mut position_phase_block : Vec<Option<usize>> = Vec::new();
+        for _ in 0..kmer_positions.len() { // fill in phasings with unphased and we will come back and put in phasings as we... phase
+            putative_phasing.push(None);
+            position_phase_block.push(None);
+        }
+
         
         let mut kmer_to_index: HashMap<i32, usize> = HashMap::new();
         for (index, (_pos, kmer)) in kmer_positions.iter().enumerate() {
@@ -182,94 +187,137 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
         let mut used_ccs_mols: BitSet = BitSet::new();
         let mut used_txg_mols: BitSet = BitSet::new();
         let mut deferred_seed: Option<usize> = None;
+        let mut current_phase_block_start = 0;
+        let mut current_phase_block_end = 0;
         
         let mut kmer_phasing_consistency_counts: HashMap<i32, [u8; 4]> = HashMap::new();
+
         'outer_loop:
-            loop {
-                if let Some(seed_index) = deferred_seed {
-                    // going backwards TODO
-                    eprintln!("continuing backwards at seed index {}", seed_index);
-                    let mut last_index = seed_index;
-                    for index in (0..seed_index).rev() { // going backwards
-                        last_index = index;
-                        //eprintln!("backwards index {}", index);
-                        let (position, kmer) = kmer_positions[index];
-                        let canonical_kmer = Kmers::canonical_pair(kmer);
-                        if let Some(counts) = kmer_phasing_consistency_counts.get(&canonical_kmer) {
-                            let consistency = is_phasing_consistent(counts, &thresholds);
-                            eprintln!("backwards kmer {}, index {}, counts {:?}, consistency {:?}", canonical_kmer, index, counts, consistency);
-                            if consistency.is_consistent {
-                                putative_phasing[index] = Some(consistency.cis);
-                                add_kmer_and_update_phasing_consistency_counts(&mut kmer_phasing_consistency_counts, 
-                                    canonical_kmer, consistency.cis, &ccs_kmer_mols, &ccs_mols, &mut used_ccs_mols, &kmer_to_index, &kmer_positions, position, params.max_linked_read_dist);
-                                add_kmer_and_update_phasing_consistency_counts(&mut kmer_phasing_consistency_counts, 
-                                    canonical_kmer, consistency.cis, &txg_kmer_mols, &txg_mols, &mut used_txg_mols, &kmer_to_index, &kmer_positions, position, params.max_linked_read_dist);
-                            }
-                            seeder.consume(index);
-                        } else {
-                            seeder.consume(index);
-                            let current_phase_block = phase_blocks.len() - 1;
-                            phase_blocks[current_phase_block].0 = index - 1;
-                            eprintln!("backwards kmer {}, index {}, NOCOUNTS", canonical_kmer, index);
-                            deferred_seed = None;
-                            break;
-                        }
-                    }
-                    eprintln!("backwards end index {}", last_index);
-                } else {
-                    // going forwards, get new good seed
-                    'seed_loop:
-                        while let Some(seed_index) = seeder.next() {
-                            seeder.consume(seed_index);
-                            let (position, kmer) = kmer_positions[seed_index]; // position is base position, index is the... index
-                            let canonical_kmer = Kmers::canonical_pair(kmer.abs());
-                            let kmer_consistency = *pairwise_kmer_consistency_counts.get(&canonical_kmer).unwrap_or(&0) as f32;
-                            phase_blocks.push((seed_index, 0));
-                            
-                            if !(kmer_consistency > min_seed_consistency && kmer_consistency < max_seed_consistency) {
-                                seeder.consume(seed_index);
-                                eprintln!("bad seed with {:?}", kmer_consistency);
-                                continue;
-                            } else {
-                                eprintln!("found good seed {} with {:?} at seed index {}", canonical_kmer, kmer_consistency, seed_index);
-                                deferred_seed = Some(seed_index.clone()); // start back here when done going forward
-                                putative_phasing[seed_index] = Some(true);
-                                add_kmer_and_update_phasing_consistency_counts(&mut kmer_phasing_consistency_counts, 
-                                    canonical_kmer, true, &ccs_kmer_mols, &ccs_mols, &mut used_ccs_mols, &kmer_to_index, &kmer_positions, position, params.max_linked_read_dist);
-                                add_kmer_and_update_phasing_consistency_counts(&mut kmer_phasing_consistency_counts, 
-                                    canonical_kmer, true, &txg_kmer_mols, &txg_mols, &mut used_txg_mols, &kmer_to_index, &kmer_positions, position, params.max_linked_read_dist);
-                                for index in (seed_index+1)..kmer_positions.len() { // going forward
-                                    let (position, kmer) = kmer_positions[index];
-                                    let canonical_kmer = Kmers::canonical_pair(kmer);
-                                    if let Some(counts) = kmer_phasing_consistency_counts.get(&canonical_kmer) {
-                                        let consistency = is_phasing_consistent(counts, &thresholds);
-                                        eprintln!("forwards kmer {}, index {}, counts {:?}, consistency {:?}", canonical_kmer, index, counts, consistency);
-
-                                        if consistency.is_consistent {
-                                            putative_phasing[index] = Some(consistency.cis);
-                                            add_kmer_and_update_phasing_consistency_counts(&mut kmer_phasing_consistency_counts, 
-                                                canonical_kmer, consistency.cis, &ccs_kmer_mols, &ccs_mols, &mut used_ccs_mols, &kmer_to_index, &kmer_positions, position, params.max_linked_read_dist);
-                                            add_kmer_and_update_phasing_consistency_counts(&mut kmer_phasing_consistency_counts, 
-                                                canonical_kmer, consistency.cis, &txg_kmer_mols, &txg_mols, &mut used_txg_mols, &kmer_to_index, &kmer_positions, position, params.max_linked_read_dist);
-                                            
-                                        }
-                                        seeder.consume(index);
-
-                                    } else {
-                                        seeder.consume(index);
-                                        eprintln!("forwards kmer {}, index {}, NOCOUNTS", canonical_kmer, index);
-                                        let current_phase_block = phase_blocks.len() - 1;
-                                        phase_blocks[current_phase_block].1 = index - 1;
-                                        break 'seed_loop;
-                                    }
-                                    
-                                }
-                                eprintln!("end of contig");
+        loop { // loop over multiple phase blocks
+            if let Some(seed_index) = deferred_seed { // going backwards if we have a deferred_seed
+                eprintln!("continuing backwards at seed index {}", seed_index);
+                let mut last_index = seed_index;
+                for index in (0..seed_index).rev() { // going backwards
+                    last_index = index;
+                    //eprintln!("backwards index {}", index);
+                    let (position, kmer) = kmer_positions[index];
+                    let canonical_kmer = Kmers::canonical_pair(kmer);
+                    if let Some(counts) = kmer_phasing_consistency_counts.get(&canonical_kmer) {
+                        let consistency = is_phasing_consistent(counts, &thresholds);
+                        eprintln!("backwards kmer {}, index {}, counts {:?}, consistency {:?}", canonical_kmer, index, counts, consistency);
+                        if consistency.is_consistent {
+                            if let Some(overlapping_block) = position_phase_block[index] {
+                                // make function to merge blocks and end
+                                phase_blocks.insert(current_phase_block_id, (current_phase_block_start, current_phase_block_end));
+                                let phasing = putative_phasing[index].unwrap();
+                                // phasing, cis
+                                // so !(phasing ^ cis) gives true for true/true and false/false and false otherwise
+                                let cis = !(consistency.cis ^ phasing);
+                                eprintln!("reverse merging blocks {} and {} in {} because overlapping kmer wants to be added in {} and has phase {} in its original block", current_phase_block_id, overlapping_block, cis, consistency.cis, phasing);
+                                let (new_block_id, new_start, new_end) = merge_phase_blocks(&mut phase_blocks, 
+                                    &mut position_phase_block, &mut putative_phasing, 
+                                    current_phase_block_id, overlapping_block, cis);
+                                
                                 break;
                             }
-                    } // end forward seed loop
-                } // end forward/backward conditional 
-            } // end phase block loop
+                            current_phase_block_start = index;
+                            position_phase_block[index] = Some(current_phase_block_id);
+                            putative_phasing[index] = Some(consistency.cis);
+                            add_kmer_and_update_phasing_consistency_counts(&mut kmer_phasing_consistency_counts, 
+                                canonical_kmer, consistency.cis, &ccs_kmer_mols, &ccs_mols, &mut used_ccs_mols, &kmer_to_index, &kmer_positions, position, params.max_linked_read_dist);
+                            add_kmer_and_update_phasing_consistency_counts(&mut kmer_phasing_consistency_counts, 
+                                canonical_kmer, consistency.cis, &txg_kmer_mols, &txg_mols, &mut used_txg_mols, &kmer_to_index, &kmer_positions, position, params.max_linked_read_dist);
+                        }
+                        seeder.consume(index);
+                    } else {
+                        seeder.consume(index);
+                        //current_phase_block_id.0 = index - 1;
+                        phase_blocks.insert(current_phase_block_id, (current_phase_block_start, current_phase_block_end));
+                        eprintln!("backwards kmer {}, index {}, NOCOUNTS", canonical_kmer, index);
+                        current_phase_block_id += 1;
+                        deferred_seed = None;
+                        break;
+                    }
+                }
+                eprintln!("backwards end index {}", last_index);
+            } else {
+                // going forwards, get new good seed
+                'seed_loop:
+                    while let Some(seed_index) = seeder.next() {
+                        seeder.consume(seed_index);
+                        let (position, kmer) = kmer_positions[seed_index]; // position is base position, index is the... index
+                        let canonical_kmer = Kmers::canonical_pair(kmer.abs());
+                        let kmer_consistency = *pairwise_kmer_consistency_counts.get(&canonical_kmer).unwrap_or(&0) as f32;
+                        //phase_blocks.push((seed_index, 0));
+                        
+                        if !(kmer_consistency > min_seed_consistency && kmer_consistency < max_seed_consistency) {
+                            seeder.consume(seed_index);
+                            eprintln!("bad seed with {:?}", kmer_consistency);
+                            continue;
+                        } else {
+                            eprintln!("found good seed {} with {:?} at seed index {}", canonical_kmer, kmer_consistency, seed_index);
+                            deferred_seed = Some(seed_index.clone()); // start back here when done going forward
+                            putative_phasing[seed_index] = Some(true);
+                            add_kmer_and_update_phasing_consistency_counts(&mut kmer_phasing_consistency_counts, 
+                                canonical_kmer, true, &ccs_kmer_mols, &ccs_mols, &mut used_ccs_mols, &kmer_to_index, &kmer_positions, position, params.max_linked_read_dist);
+                            add_kmer_and_update_phasing_consistency_counts(&mut kmer_phasing_consistency_counts, 
+                                canonical_kmer, true, &txg_kmer_mols, &txg_mols, &mut used_txg_mols, &kmer_to_index, &kmer_positions, position, params.max_linked_read_dist);
+                            current_phase_block_start = seed_index;
+                            current_phase_block_end = seed_index;
+                            position_phase_block[seed_index] = Some(current_phase_block_id);
+
+                            for index in (seed_index+1)..kmer_positions.len() { // going forward
+                                let (position, kmer) = kmer_positions[index];
+                                let canonical_kmer = Kmers::canonical_pair(kmer);
+                                if let Some(counts) = kmer_phasing_consistency_counts.get(&canonical_kmer) {
+                                    let consistency = is_phasing_consistent(counts, &thresholds);
+                                    eprintln!("forwards kmer {}, index {}, counts {:?}, consistency {:?}", canonical_kmer, index, counts, consistency);
+
+                                    if consistency.is_consistent {
+                                        if let Some(overlapping_block) = position_phase_block[index] {
+                                            phase_blocks.insert(current_phase_block_id, (current_phase_block_start, current_phase_block_end));
+                                            let phasing = putative_phasing[index].unwrap();
+                                            // phasing, cis
+                                             // so !(phasing ^ cis) gives true for true/true and false/false and false otherwise
+                                            let cis = !(consistency.cis ^ phasing);
+                                            eprintln!("forward merging blocks {} and {} in {} because overlapping kmer wants to be added in {} and has phase {} in its original block", 
+                                                current_phase_block_id, overlapping_block, cis, consistency.cis, phasing);
+                                            let (new_block_id, new_start, new_end) = merge_phase_blocks(&mut phase_blocks, 
+                                                &mut position_phase_block, &mut putative_phasing, 
+                                                current_phase_block_id, overlapping_block, cis);
+                                            current_phase_block_id = new_block_id;
+                                            current_phase_block_start = new_start;
+                                            current_phase_block_end = new_end;
+                                            //write function to merge blocks and break 'seed_loop
+
+                                            break 'seed_loop;
+                                        }
+                                        putative_phasing[index] = Some(consistency.cis);
+                                        add_kmer_and_update_phasing_consistency_counts(&mut kmer_phasing_consistency_counts, 
+                                            canonical_kmer, consistency.cis, &ccs_kmer_mols, &ccs_mols, &mut used_ccs_mols, &kmer_to_index, &kmer_positions, position, params.max_linked_read_dist);
+                                        add_kmer_and_update_phasing_consistency_counts(&mut kmer_phasing_consistency_counts, 
+                                            canonical_kmer, consistency.cis, &txg_kmer_mols, &txg_mols, &mut used_txg_mols, &kmer_to_index, &kmer_positions, position, params.max_linked_read_dist);
+                                        current_phase_block_start = index;
+                                    }
+                                    seeder.consume(index);
+
+                                } else {
+                                    seeder.consume(index);
+                                    eprintln!("forward end kmer {}, index {}, NOCOUNTS", canonical_kmer, index);
+                                    let current_phase_block = phase_blocks.len() - 1;
+                                    //phase_blocks[current_phase_block].1 = index - 1;
+                                    break 'seed_loop;
+                                }
+                                
+                            }
+                            eprintln!("end of contig");
+                            break;
+                        }
+                } // end forward seed loop
+                // no more seeds
+                break 'outer_loop;
+            } // end forward/backward conditional 
+        } // end phase block loop
 
         let phase_block_consistencies = get_phase_block_consistencies(&phase_blocks, &putative_phasing, &kmer_positions, &hic_mols, &hic_kmer_mols);
 
@@ -277,13 +325,48 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
 
 }
 
-fn get_phase_block_consistencies(phase_blocks: &Vec<(usize, usize)>, putative_phasing: &Vec<Option<bool>>, 
+fn merge_phase_blocks(phase_blocks: &mut HashMap<usize, (usize, usize)>, 
+    position_phase_block: &mut Vec<Option<usize>>, putative_phasing: &mut Vec<Option<bool>>, 
+        phase_block1: usize, phase_block2: usize, cis: bool) -> (usize, usize, usize) {
+    let new_start: usize;
+    let new_end: usize;
+    { // this scope is for the rust gods
+        let (start1, end1) = phase_blocks.get(&phase_block1).unwrap();
+        let (start2, end2) = phase_blocks.get(&phase_block2).unwrap();
+        eprintln!("merging blocks {} and {} with positions {}-{} and {}-{}", phase_block1, phase_block2, start1, start2, end1, end2);
+        new_start = *start1.min(start2);
+        new_end = *end1.max(end2);
+    }
+    let canonical = phase_block1.min(phase_block2);
+    let non_canonical = phase_block1.max(phase_block2);
+    let (s1_remove, e1_remove) = phase_blocks.get(&non_canonical).unwrap();
+    for index in *s1_remove..(e1_remove+1) {
+        if let Some(phase) = putative_phasing[index] {
+            position_phase_block[index] = Some(canonical);
+            if !cis {
+                putative_phasing[index] = Some(!phase);
+            }
+        }
+    }
+    eprintln!("removing block {}", non_canonical);
+    { // why do i have to create random scopes?
+        phase_blocks.remove(&non_canonical);
+    }
+    eprintln!("replacing with new block {} from {}-{}", canonical, new_start, new_end);
+    phase_blocks.insert(canonical, (new_start, new_end));
+
+    (canonical, new_start, new_end)
+}
+
+fn get_phase_block_consistencies(phase_blocks: &HashMap<usize, (usize, usize)>, putative_phasing: &Vec<Option<bool>>, 
     kmer_positions: &Vec<(usize, i32)>, hic_mols: &Mols, hic_kmer_mols: &KmerMols) -> HashMap<(usize, usize), [u8; 4]> {
     let mut phase_block_consistencies: HashMap<(usize, usize), [u8; 4]> = HashMap::new();
-
+    let mut blocks: Vec<usize> = Vec::new();
+    
     let mut block_kmer_phasings: HashMap<usize, HashMap<i32, bool>> = HashMap::new();
-    for (block_id, (start, end)) in phase_blocks.iter().enumerate() {
-        let kmer_phasings = block_kmer_phasings.entry(block_id).or_insert(HashMap::new());
+    for (block_id, (start, end)) in phase_blocks.iter() {
+        blocks.push(*block_id);
+        let kmer_phasings = block_kmer_phasings.entry(*block_id).or_insert(HashMap::new());
         for index in *start..*end {
             let (_pos, kmer) = kmer_positions[index];
             let canonical_kmer = Kmers::canonical_pair(kmer);
@@ -293,10 +376,10 @@ fn get_phase_block_consistencies(phase_blocks: &Vec<(usize, usize)>, putative_ph
         }
     }
 
+   
 
-
-    for phase_block1 in 0..phase_blocks.len() {
-        let (start1, end1) = phase_blocks[phase_block1];
+    for phase_block1 in 0..blocks.len() {
+        let (start1, end1) = phase_blocks.get(&phase_block1).unwrap();
         let block1_phasing = block_kmer_phasings.get(&phase_block1).unwrap();
         for phase_block2 in (phase_block1 + 1)..phase_blocks.len() {
             //let (start2, end2) = phase_blocks[phase_block2];
