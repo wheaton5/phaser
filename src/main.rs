@@ -160,13 +160,13 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
     
 
     for contig in 1..(assembly.contig_kmers.len()+1) {
-        if contig > 1 { break } // TODO remove
+        if contig > 5 { break } // TODO remove
         //let mut possible_positions: HashSet<usize> = HashSet::new();
         let kmer_positions = assembly.contig_kmers.get(&(contig as i32)).expect("please no");
         let mut putative_phasing: Vec<Option<bool>> = Vec::new();
         
 
-        eprintln!("phasing contig {} with {} kmer positions", contig, kmer_positions.len());
+        eprintln!("PHASING CONTIG {} with {} kmer positions", contig, kmer_positions.len());
 
         let mut phase_blocks: HashMap<usize, (usize, usize)> = HashMap::new(); // map of phase block id to start, stop
         let mut current_phase_block_id: usize = 0;
@@ -217,6 +217,7 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                                 let (new_block_id, new_start, new_end) = merge_phase_blocks(&mut phase_blocks, 
                                     &mut position_phase_block, &mut putative_phasing, 
                                     current_phase_block_id, overlapping_block, cis);
+                                deferred_seed = None;
                                 
                                 break;
                             }
@@ -318,6 +319,11 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                 } // end forward seed loop
                 // no more seeds
                 if ! any {
+                    let mut count_vec: Vec<(&usize, &(usize, usize))> = phase_blocks.iter().collect();
+                    count_vec.sort_by(|a, b| b.1.cmp(a.1));
+                    for (phase_block_id, (start, end)) in count_vec.iter() {
+                        eprintln!("phase block {} goes from {}-{}", phase_block_id, start, end);
+                    }
                     eprintln!("no more seeds, done with contig");
                     break 'outer_loop;
                 }
@@ -326,7 +332,18 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
         } // end phase block loop
 
         let phase_block_consistencies = get_phase_block_consistencies(&phase_blocks, &putative_phasing, &kmer_positions, &hic_mols, &hic_kmer_mols);
-
+        
+        let hic_thresholds = PhasingConsistencyThresholds{
+            min_count: 500,
+            min_percent: 0.75,
+            minor_allele_fraction: 0.25,
+        };
+        for ((phase_block1, phase_block2), counts) in phase_block_consistencies.iter() {
+            let consistency = is_phasing_consistent(counts, &hic_thresholds);
+            eprintln!("phase block {} and {} are{} phasing consisent in {} with counts {:?}", phase_block1, phase_block2, 
+                match consistency.is_consistent { true => "", false => " not" }, 
+                match consistency.cis { true => "cis", false => "trans"}, counts);
+        }
     } // end contig loop 
 
 }
@@ -546,7 +563,7 @@ impl RandSeeder {
         */
        
         self.used.insert(index);
-         eprintln!("consumed {} checking {}", index,self.used.contains(index));
+        eprintln!("consumed {} checking {}", index,self.used.contains(index));
     } 
 
     fn next(&mut self) -> Option<usize> {
