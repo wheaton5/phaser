@@ -236,6 +236,16 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                         //current_phase_block_id.0 = index - 1;
                         phase_blocks.insert(current_phase_block_id, (current_phase_block_start, current_phase_block_end));
                         eprintln!("backwards kmer {}, index {}, NOCOUNTS", canonical_kmer, index);
+                        for backdex in ((index-20)..index).rev() {
+                            if backdex < 0 { continue; }
+                            let (_position, kmer) = kmer_positions[backdex];
+                            let canonical_kmer = Kmers::canonical_pair(kmer);
+                            if let Some(counts) = kmer_phasing_consistency_counts.get(&canonical_kmer) {
+                                eprintln!("\treaching backwards just to check counts {} with {:?}", backdex, counts);
+                            } else {
+                                eprintln!("\treaching backwards just to check counts {} with NO COUNTS", backdex);
+                            }
+                        }
                         current_phase_block_id = max_phase_block_id + 1;
                         max_phase_block_id += 1;
                         deferred_seed = None;
@@ -310,6 +320,15 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                                 } else {
                                     seeder.consume(index);
                                     eprintln!("forward end kmer {}, index {}, NOCOUNTS", canonical_kmer, index);
+                                    for fordex in (index+1)..(index+20) {
+                                        let (_position, kmer) = kmer_positions[fordex];
+                                        let canonical_kmer = Kmers::canonical_pair(kmer);
+                                        if let Some(counts) = kmer_phasing_consistency_counts.get(&canonical_kmer) {
+                                            eprintln!("\treaching forward just to check counts {} with {:?}", fordex, counts);
+                                        } else {
+                                            eprintln!("\treaching forward just to check counts {} with NO COUNTS", fordex);
+                                        }
+                                    }
                                     //let current_phase_block = phase_blocks.len() - 1;
                                     //phase_blocks[current_phase_block].1 = index - 1;
                                     break 'seed_loop;
