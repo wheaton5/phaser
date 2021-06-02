@@ -657,7 +657,7 @@ fn detect_sex_contigs(assembly: &Assembly, params: &Params) -> HashSet<i32> {
 
     //eprintln!("ok how many contigs are there in the assembly {}", assembly.molecules.len());
 
-    for contig_id in 1..(assembly.contig_names.len()+1) {
+    for contig_id in 1..(assembly.contig_names.len()) {
         let size = assembly.contig_sizes.get(&(contig_id as i32)).expect("I am actually going crazy");
         let kmers = match assembly.molecules.get(&(contig_id as i32)) {
             Some(x) => x.len(),
