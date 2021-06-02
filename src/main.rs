@@ -671,19 +671,21 @@ fn detect_sex_contigs(assembly: &Assembly, params: &Params) -> HashSet<i32> {
     let avg_cov = cov_sum / denom;
     let avg_density = density_sum / denom;
 
-    //eprintln!("kmer_depth\thet_kmer_density\tcontig_id\tcontig_name\tcontig_length\tcontig_classification\tsex_contig_cov_cutoff\tsex_density_cutoff");
+    eprintln!("detecting sex contigs. mean kmer count is {} and mean paired kmer density is {}", avg_cov, avg_density);
+    eprintln!("kmer_depth\thet_kmer_density\tcontig_id\tcontig_name\tcontig_length\tcontig_classification\tsex_contig_cov_cutoff\tsex_density_cutoff");
     for (depth, density, contig) in densities.iter() {
         
+        let mut sex = "autosome";
         if *depth < params.sex_contig_cov_cutoff * avg_cov 
             && *density < params.sex_contig_het_kmer_density_cutoff * avg_density {
                 sex_contigs.insert(*contig as i32);
-            
+            sex = "sex";
         }
-        //eprintln!("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}", depth, density, contig, 
-        //    assembly.contig_names[*contig as usize], 
-        //    assembly.contig_sizes.get(&(*contig as i32)).unwrap(), 
-        //    sex,  params.sex_contig_cov_cutoff * avg_cov, 
-        //    params.sex_contig_het_kmer_density_cutoff * avg_density);
+        eprintln!("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}", depth, density, contig, 
+            assembly.contig_names[*contig as usize], 
+            assembly.contig_sizes.get(&(*contig as i32)).unwrap(), 
+            sex,  params.sex_contig_cov_cutoff * avg_cov, 
+            params.sex_contig_het_kmer_density_cutoff * avg_density);
 
     }
     sex_contigs
@@ -794,10 +796,10 @@ fn load_params() -> Params {
     let ploidy = params.value_of("ploidy").unwrap_or("2");
     let ploidy = ploidy.to_string().parse::<usize>().unwrap();
 
-    let sex_contig_het_kmer_density_cutoff = params.value_of("sex_contig_het_kmer_density_cutoff").unwrap_or("0.1");
+    let sex_contig_het_kmer_density_cutoff = params.value_of("sex_contig_het_kmer_density_cutoff").unwrap_or("0.5");
     let sex_contig_het_kmer_density_cutoff = sex_contig_het_kmer_density_cutoff.to_string().parse::<f32>().unwrap();
 
-    let sex_contig_cov_cutoff = params.value_of("sex_contig_cov_cutoff").unwrap_or("0.65");
+    let sex_contig_cov_cutoff = params.value_of("sex_contig_cov_cutoff").unwrap_or("0.8");
     let sex_contig_cov_cutoff = sex_contig_cov_cutoff.to_string().parse::<f32>().unwrap();
         
     let min_hic_links = params.value_of("min_hic_links").unwrap_or("4");
