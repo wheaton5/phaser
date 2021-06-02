@@ -189,6 +189,7 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
         let mut deferred_seed: Option<usize> = None;
         let mut current_phase_block_start = 0;
         let mut current_phase_block_end = 0;
+        let mut max_phase_block_id = 0;
         
         let mut kmer_phasing_consistency_counts: HashMap<i32, [u8; 4]> = HashMap::new();
 
@@ -235,7 +236,8 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                         //current_phase_block_id.0 = index - 1;
                         phase_blocks.insert(current_phase_block_id, (current_phase_block_start, current_phase_block_end));
                         eprintln!("backwards kmer {}, index {}, NOCOUNTS", canonical_kmer, index);
-                        current_phase_block_id += 1;
+                        current_phase_block_id = max_phase_block_id + 1;
+                        max_phase_block_id += 1;
                         deferred_seed = None;
                         break;
                     }
@@ -289,6 +291,7 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                                                 &mut position_phase_block, &mut putative_phasing, 
                                                 current_phase_block_id, overlapping_block, cis);
                                             current_phase_block_id = new_block_id;
+                                            assert!(new_start == current_phase_block_start);
                                             current_phase_block_start = new_start;
                                             current_phase_block_end = new_end;
                                             //write function to merge blocks and break 'seed_loop
@@ -307,7 +310,7 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                                 } else {
                                     seeder.consume(index);
                                     eprintln!("forward end kmer {}, index {}, NOCOUNTS", canonical_kmer, index);
-                                    let current_phase_block = phase_blocks.len() - 1;
+                                    //let current_phase_block = phase_blocks.len() - 1;
                                     //phase_blocks[current_phase_block].1 = index - 1;
                                     break 'seed_loop;
                                 }
@@ -356,7 +359,7 @@ fn merge_phase_blocks(phase_blocks: &mut HashMap<usize, (usize, usize)>,
     { // this scope is for the rust gods
         let (start1, end1) = phase_blocks.get(&phase_block1).unwrap();
         let (start2, end2) = phase_blocks.get(&phase_block2).unwrap();
-        eprintln!("merging blocks {} and {} with positions {}-{} and {}-{}", phase_block1, phase_block2, start1, start2, end1, end2);
+        eprintln!("merging blocks {} and {} with positions {}-{} and {}-{}", phase_block1, phase_block2, start1, end1, start2, end2);
         new_start = *start1.min(start2);
         new_end = *end1.max(end2);
     }
