@@ -219,7 +219,8 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                                     &mut position_phase_block, &mut putative_phasing, 
                                     current_phase_block_id, overlapping_block, cis);
                                 deferred_seed = None;
-                                
+                                current_phase_block_id = max_phase_block_id + 1;
+                                max_phase_block_id += 1;
                                 break;
                             }
                             current_phase_block_start = index;
