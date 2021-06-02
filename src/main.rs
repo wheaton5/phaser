@@ -160,7 +160,10 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
     
 
     for contig in 1..(assembly.contig_kmers.len()+1) {
-        if contig > 5 { break } // TODO remove
+        if contig > 8 { break } // TODO remove
+        if sex_contigs.contains(&(contig as i32)) { continue; }
+        let length = *assembly.contig_sizes.get(&(contig as i32)).unwrap();
+        if length <= params.min_contig_length { continue; }
         //let mut possible_positions: HashSet<usize> = HashSet::new();
         let kmer_positions = assembly.contig_kmers.get(&(contig as i32)).expect("please no");
         let mut putative_phasing: Vec<Option<bool>> = Vec::new();
@@ -197,10 +200,10 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
         loop { // loop over multiple phase blocks
             if let Some(seed_index) = deferred_seed { // going backwards if we have a deferred_seed
                 eprintln!("continuing backwards at seed index {}", seed_index);
+                deferred_seed = None;
                 let mut last_index = seed_index;
                 for index in (0..seed_index).rev() { // going backwards
                     last_index = index;
-                    //eprintln!("backwards index {}", index);
                     let (position, kmer) = kmer_positions[index];
                     let canonical_kmer = Kmers::canonical_pair(kmer);
                     if let Some(counts) = kmer_phasing_consistency_counts.get(&canonical_kmer) {
@@ -215,12 +218,9 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                                 // so !(phasing ^ cis) gives true for true/true and false/false and false otherwise
                                 let cis = !(consistency.cis ^ phasing);
                                 eprintln!("reverse merging blocks {} and {} in {} because overlapping kmer wants to be added in {} and has phase {} in its original block", current_phase_block_id, overlapping_block, cis, consistency.cis, phasing);
-                                let (new_block_id, new_start, new_end) = merge_phase_blocks(&mut phase_blocks, 
+                                let (_new_block_id, _new_start, _new_end) = merge_phase_blocks(&mut phase_blocks, 
                                     &mut position_phase_block, &mut putative_phasing, 
                                     current_phase_block_id, overlapping_block, cis);
-                                deferred_seed = None;
-                                current_phase_block_id = max_phase_block_id + 1;
-                                max_phase_block_id += 1;
                                 break;
                             }
                             current_phase_block_start = index;
@@ -234,11 +234,9 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                         seeder.consume(index);
                     } else {
                         seeder.consume(index);
-                        //current_phase_block_id.0 = index - 1;
                         phase_blocks.insert(current_phase_block_id, (current_phase_block_start, current_phase_block_end));
                         eprintln!("backwards kmer {}, index {}, NOCOUNTS", canonical_kmer, index);
                         for backdex in ((index-20)..index).rev() {
-                            if backdex < 0 { continue; }
                             let (_position, kmer) = kmer_positions[backdex];
                             let canonical_kmer = Kmers::canonical_pair(kmer);
                             if let Some(counts) = kmer_phasing_consistency_counts.get(&canonical_kmer) {
@@ -247,13 +245,13 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                                 eprintln!("\treaching backwards just to check counts {} with NO COUNTS", backdex);
                             }
                         }
-                        current_phase_block_id = max_phase_block_id + 1;
-                        max_phase_block_id += 1;
-                        deferred_seed = None;
                         break;
                     }
                 }
                 eprintln!("backwards end index {}", last_index);
+                current_phase_block_id = max_phase_block_id + 1;
+                max_phase_block_id += 1;
+
             } else {
                 // going forwards, get new good seed
                 let mut any = false;
@@ -400,6 +398,10 @@ fn merge_phase_blocks(phase_blocks: &mut HashMap<usize, (usize, usize)>,
     }
     eprintln!("replacing with new block {} from {}-{}", canonical, new_start, new_end);
     phase_blocks.insert(canonical, (new_start, new_end));
+    eprintln!("printing all blocks");
+    for (id,(start, end)) in phase_blocks.iter() {
+        eprintln!("\tblock {} from {}-{}", id, start, end);
+    }
 
     (canonical, new_start, new_end)
 }
@@ -655,7 +657,7 @@ fn detect_sex_contigs(assembly: &Assembly, params: &Params) -> HashSet<i32> {
 
     //eprintln!("ok how many contigs are there in the assembly {}", assembly.molecules.len());
 
-    for contig_id in 1..assembly.contig_names.len() {
+    for contig_id in 1..(assembly.contig_names.len()+1) {
         let size = assembly.contig_sizes.get(&(contig_id as i32)).expect("I am actually going crazy");
         let kmers = match assembly.molecules.get(&(contig_id as i32)) {
             Some(x) => x.len(),
@@ -675,17 +677,16 @@ fn detect_sex_contigs(assembly: &Assembly, params: &Params) -> HashSet<i32> {
     eprintln!("detecting sex contigs. mean kmer count is {} and mean paired kmer density is {}", avg_cov, avg_density);
     eprintln!("kmer_depth\thet_kmer_density\tcontig_id\tcontig_name\tcontig_length\tcontig_classification\tsex_contig_cov_cutoff\tsex_density_cutoff");
     for (depth, density, contig) in densities.iter() {
-        
+        let length = *assembly.contig_sizes.get(&(*contig as i32)).unwrap();
         let mut sex = "autosome";
-        if *depth < params.sex_contig_cov_cutoff * avg_cov 
+        if length > params.min_contig_length && *depth < params.sex_contig_cov_cutoff * avg_cov 
             && *density < params.sex_contig_het_kmer_density_cutoff * avg_density {
                 sex_contigs.insert(*contig as i32);
             sex = "sex";
         }
         eprintln!("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}", depth, density, contig, 
             assembly.contig_names[*contig as usize], 
-            assembly.contig_sizes.get(&(*contig as i32)).unwrap(), 
-            sex,  params.sex_contig_cov_cutoff * avg_cov, 
+            length, sex,  params.sex_contig_cov_cutoff * avg_cov, 
             params.sex_contig_het_kmer_density_cutoff * avg_density);
 
     }
@@ -700,6 +701,7 @@ struct Params {
     hic_mols: Vec<String>,
     ccs_mols: Vec<String>,
     contig_kmer_cov: Vec<f32>,
+    min_contig_length: usize,
     output: String,
     assembly_kmers: String,
     assembly_fasta: String,
@@ -822,6 +824,9 @@ fn load_params() -> Params {
     let max_linked_read_dist = params.value_of("min_linked_read_dist").unwrap_or("150000");
     let max_linked_read_dist = max_linked_read_dist.to_string().parse::<usize>().unwrap();
 
+    let min_contig_length = params.value_of("min_contig_length").unwrap_or("100000");
+    let min_contig_length = min_contig_length.to_string().parse::<usize>().unwrap();
+
     Params {
         het_kmers: het_kmers.to_string(),
         output: output.to_string(),
@@ -843,5 +848,6 @@ fn load_params() -> Params {
         min_hic_links: min_hic_links,
         break_window: break_window,
         max_linked_read_dist: max_linked_read_dist,
+        min_contig_length: min_contig_length,
     }
 }

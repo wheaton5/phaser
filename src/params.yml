@@ -30,6 +30,11 @@ args:
         takes_value: true
         required: false
         help: het kmer density cutoff for contig to be called a sex contig, default = 0.5 ( * avg het kmer density )
+    - min_contig_length:
+        long: min_contig_length
+        takes_value: true
+        required: false
+        help: min contig length to try phasing (default 100000)
     - linked_read_mols:
         long: linked_read_mols
         short: l
