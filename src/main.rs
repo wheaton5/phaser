@@ -196,6 +196,7 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
         
         let mut kmer_phasing_consistency_counts: HashMap<i32, [u8; 4]> = HashMap::new();
 
+        let mut no_counts_counter = 0;
         'outer_loop:
         loop { // loop over multiple phase blocks
             if let Some(seed_index) = deferred_seed { // going backwards if we have a deferred_seed
@@ -203,10 +204,12 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                 deferred_seed = None;
                 let mut last_index = seed_index;
                 for index in (0..seed_index).rev() { // going backwards
+                    seeder.consume(index);
                     last_index = index;
                     let (position, kmer) = kmer_positions[index];
                     let canonical_kmer = Kmers::canonical_pair(kmer);
                     if let Some(counts) = kmer_phasing_consistency_counts.get(&canonical_kmer) {
+                        no_counts_counter = 0;
                         let consistency = is_phasing_consistent(counts, &thresholds);
                         eprintln!("backwards kmer {}, index {}, counts {:?}, consistency {:?}", canonical_kmer, index, counts, consistency);
                         if consistency.is_consistent {
@@ -231,27 +234,27 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                             add_kmer_and_update_phasing_consistency_counts(&mut kmer_phasing_consistency_counts, 
                                 canonical_kmer, consistency.cis, &txg_kmer_mols, &txg_mols, &mut used_txg_mols, &kmer_to_index, &kmer_positions, position, params.max_linked_read_dist);
                         }
-                        seeder.consume(index);
                     } else {
-                        seeder.consume(index);
                         phase_blocks.insert(current_phase_block_id, (current_phase_block_start, current_phase_block_end));
                         eprintln!("backwards kmer {}, index {}, NOCOUNTS", canonical_kmer, index);
-                        for backdex in ((index-20)..index).rev() {
-                            let (_position, kmer) = kmer_positions[backdex];
-                            let canonical_kmer = Kmers::canonical_pair(kmer);
-                            if let Some(counts) = kmer_phasing_consistency_counts.get(&canonical_kmer) {
-                                eprintln!("\treaching backwards just to check counts {} with {:?}", backdex, counts);
-                            } else {
-                                eprintln!("\treaching backwards just to check counts {} with NO COUNTS", backdex);
+                        no_counts_counter += 1;
+                        if no_counts_counter > 100 {
+                            for backdex in ((index-20).max(0)..index).rev() {
+                                let (_position, kmer) = kmer_positions[backdex];
+                                let canonical_kmer = Kmers::canonical_pair(kmer);
+                                if let Some(counts) = kmer_phasing_consistency_counts.get(&canonical_kmer) {
+                                    eprintln!("\treaching backwards just to check counts {} with {:?}", backdex, counts);
+                                } else {
+                                    eprintln!("\treaching backwards just to check counts {} with NO COUNTS", backdex);
+                                }
                             }
+                            break;
                         }
-                        break;
                     }
                 }
                 eprintln!("backwards end index {}", last_index);
                 current_phase_block_id = max_phase_block_id + 1;
                 max_phase_block_id += 1;
-
             } else {
                 // going forwards, get new good seed
                 let mut any = false;
@@ -262,8 +265,6 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                         let (position, kmer) = kmer_positions[seed_index]; // position is base position, index is the... index
                         let canonical_kmer = Kmers::canonical_pair(kmer.abs());
                         let kmer_consistency = *pairwise_kmer_consistency_counts.get(&canonical_kmer).unwrap_or(&0) as f32;
-                        //phase_blocks.push((seed_index, 0));
-                        
                         if !(kmer_consistency > min_seed_consistency && kmer_consistency < max_seed_consistency) {
                             seeder.consume(seed_index);
                             eprintln!("bad seed with {:?}", kmer_consistency);
@@ -281,9 +282,11 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                             position_phase_block[seed_index] = Some(current_phase_block_id);
 
                             for index in (seed_index+1)..kmer_positions.len() { // going forward
+                                seeder.consume(index);
                                 let (position, kmer) = kmer_positions[index];
                                 let canonical_kmer = Kmers::canonical_pair(kmer);
                                 if let Some(counts) = kmer_phasing_consistency_counts.get(&canonical_kmer) {
+                                    no_counts_counter = 0;
                                     let consistency = is_phasing_consistent(counts, &thresholds);
                                     eprintln!("forwards kmer {}, index {}, counts {:?}, consistency {:?}", canonical_kmer, index, counts, consistency);
 
@@ -304,7 +307,6 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                                             current_phase_block_start = new_start;
                                             current_phase_block_end = new_end;
                                             //write function to merge blocks and break 'seed_loop
-
                                             break 'seed_loop;
                                         }
                                         putative_phasing[index] = Some(consistency.cis);
@@ -314,25 +316,22 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                                             canonical_kmer, consistency.cis, &txg_kmer_mols, &txg_mols, &mut used_txg_mols, &kmer_to_index, &kmer_positions, position, params.max_linked_read_dist);
                                         current_phase_block_end = index;
                                     }
-                                    seeder.consume(index);
-
                                 } else {
-                                    seeder.consume(index);
                                     eprintln!("forward end kmer {}, index {}, NOCOUNTS", canonical_kmer, index);
-                                    for fordex in (index+1)..(index+20) {
-                                        let (_position, kmer) = kmer_positions[fordex];
-                                        let canonical_kmer = Kmers::canonical_pair(kmer);
-                                        if let Some(counts) = kmer_phasing_consistency_counts.get(&canonical_kmer) {
-                                            eprintln!("\treaching forward just to check counts {} with {:?}", fordex, counts);
-                                        } else {
-                                            eprintln!("\treaching forward just to check counts {} with NO COUNTS", fordex);
+                                    no_counts_counter += 1;
+                                    if no_counts_counter > 100 {
+                                        for fordex in (index+1).min(kmer_positions.len())..(index+20).min(kmer_positions.len()) {
+                                            let (_position, kmer) = kmer_positions[fordex];
+                                            let canonical_kmer = Kmers::canonical_pair(kmer);
+                                            if let Some(counts) = kmer_phasing_consistency_counts.get(&canonical_kmer) {
+                                                eprintln!("\treaching forward just to check counts {} with {:?}", fordex, counts);
+                                            } else {
+                                                eprintln!("\treaching forward just to check counts {} with NO COUNTS", fordex);
+                                            }
                                         }
+                                        break 'seed_loop;
                                     }
-                                    //let current_phase_block = phase_blocks.len() - 1;
-                                    //phase_blocks[current_phase_block].1 = index - 1;
-                                    break 'seed_loop;
                                 }
-                                
                             }
                             eprintln!("end of contig");
                             break 'seed_loop;
