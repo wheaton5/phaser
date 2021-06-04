@@ -209,10 +209,10 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                     let (position, kmer) = kmer_positions[index];
                     let canonical_kmer = Kmers::canonical_pair(kmer);
                     if let Some(counts) = kmer_phasing_consistency_counts.get(&canonical_kmer) {
-                        no_counts_counter = 0;
                         let consistency = is_phasing_consistent(counts, &thresholds);
                         eprintln!("backwards kmer {}, index {}, counts {:?}, consistency {:?}", canonical_kmer, index, counts, consistency);
                         if consistency.is_consistent {
+                            no_counts_counter = 0;
                             if let Some(overlapping_block) = position_phase_block[index] {
                                 // make function to merge blocks and end
                                 phase_blocks.insert(current_phase_block_id, (current_phase_block_start, current_phase_block_end));
@@ -238,7 +238,7 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                         phase_blocks.insert(current_phase_block_id, (current_phase_block_start, current_phase_block_end));
                         eprintln!("backwards kmer {}, index {}, NOCOUNTS", canonical_kmer, index);
                         no_counts_counter += 1;
-                        if no_counts_counter > 100 {
+                        if no_counts_counter > 20 {
                             for backdex in ((index-20).max(0)..index).rev() {
                                 let (_position, kmer) = kmer_positions[backdex];
                                 let canonical_kmer = Kmers::canonical_pair(kmer);
@@ -252,7 +252,8 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                         }
                     }
                 }
-                eprintln!("backwards end index {}", last_index);
+                phase_blocks.insert(current_phase_block_id, (current_phase_block_start, current_phase_block_end));
+                eprintln!("backwards end index {}", current_phase_block_start);
                 current_phase_block_id = max_phase_block_id + 1;
                 max_phase_block_id += 1;
             } else {
@@ -262,6 +263,7 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                     while let Some(seed_index) = seeder.next() {
                         any = true;
                         seeder.consume(seed_index);
+                        let mut new_seed_bailout_count = 0;
                         let (position, kmer) = kmer_positions[seed_index]; // position is base position, index is the... index
                         let canonical_kmer = Kmers::canonical_pair(kmer.abs());
                         let kmer_consistency = *pairwise_kmer_consistency_counts.get(&canonical_kmer).unwrap_or(&0) as f32;
@@ -286,11 +288,11 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                                 let (position, kmer) = kmer_positions[index];
                                 let canonical_kmer = Kmers::canonical_pair(kmer);
                                 if let Some(counts) = kmer_phasing_consistency_counts.get(&canonical_kmer) {
-                                    no_counts_counter = 0;
                                     let consistency = is_phasing_consistent(counts, &thresholds);
                                     eprintln!("forwards kmer {}, index {}, counts {:?}, consistency {:?}", canonical_kmer, index, counts, consistency);
-
                                     if consistency.is_consistent {
+                                        new_seed_bailout_count = 0;
+                                        no_counts_counter = 0;
                                         if let Some(overlapping_block) = position_phase_block[index] {
                                             phase_blocks.insert(current_phase_block_id, (current_phase_block_start, current_phase_block_end));
                                             let phasing = putative_phasing[index].unwrap();
@@ -315,11 +317,24 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                                         add_kmer_and_update_phasing_consistency_counts(&mut kmer_phasing_consistency_counts, 
                                             canonical_kmer, consistency.cis, &txg_kmer_mols, &txg_mols, &mut used_txg_mols, &kmer_to_index, &kmer_positions, position, params.max_linked_read_dist);
                                         current_phase_block_end = index;
+                                    } else {
+                                        new_seed_bailout_count += 1;
+                                        if new_seed_bailout_count > 10 && index - seed_index < 20 {
+                                            eprintln!("FAILED SEED, do not pass go, do not collect 200$");
+                                            for baddex in seed_index..(index + 1) {
+                                                position_phase_block[baddex] = None;
+                                                putative_phasing[baddex] = None;
+                                                if baddex != seed_index {
+                                                    seeder.unconsume(baddex);
+                                                }
+                                            }
+                                            continue 'outer_loop;
+                                        }
                                     }
                                 } else {
                                     eprintln!("forward end kmer {}, index {}, NOCOUNTS", canonical_kmer, index);
                                     no_counts_counter += 1;
-                                    if no_counts_counter > 100 {
+                                    if no_counts_counter > 20 {
                                         for fordex in (index+1).min(kmer_positions.len())..(index+20).min(kmer_positions.len()) {
                                             let (_position, kmer) = kmer_positions[fordex];
                                             let canonical_kmer = Kmers::canonical_pair(kmer);
@@ -543,13 +558,9 @@ fn add_kmer_and_update_phasing_consistency_counts(kmer_phasing_consistency_count
 }
 
 struct RandSeeder {
-    seeded_rng: StdRng,
     shuffled_vec: Vec<usize>,
     used: BitSet,
-    vec_size: usize, // as we use up positions in the phasing process, we will move them to the end and shrink the vec_size
     current_position: usize, // current_position in shuffled_vec
-    reverse_index: HashMap<usize, usize>, // map from position index to index in shuffled_vec so we can 
-                                          // find them and move them to the back of shuffled_vec as they are used in the phasing process
 } 
 
 impl RandSeeder {
@@ -557,18 +568,11 @@ impl RandSeeder {
         let seed: [u8; 32] = [4; 32]; // guarranteed to be random, chosen by fair dice roll https://xkcd.com/221/
         let mut rng: StdRng = SeedableRng::from_seed(seed);
         let mut shuffled_vec: Vec<usize> = (0..size).collect::<Vec<usize>>();
-        let mut reverse_index: HashMap<usize, usize> = HashMap::new();
-        for (index, shuffled_index) in shuffled_vec.iter().enumerate() {
-            reverse_index.insert(*shuffled_index, index);
-        }
         shuffled_vec.shuffle(&mut rng);
         RandSeeder {
             used: BitSet::new(),
-            seeded_rng: rng,
             shuffled_vec: shuffled_vec,
-            vec_size: size,
             current_position: 0,
-            reverse_index: reverse_index,
         }
     }
 
@@ -587,8 +591,13 @@ impl RandSeeder {
         */
        
         self.used.insert(index);
-        eprintln!("consumed {} checking {}", index,self.used.contains(index));
-    } 
+        //eprintln!("consumed {} checking {}", index,self.used.contains(index));
+    }
+
+    fn unconsume(&mut self, index: usize) {
+        self.used.remove(index);
+        self.shuffled_vec.push(index);
+    }
 
     fn next(&mut self) -> Option<usize> {
         
