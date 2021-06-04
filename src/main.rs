@@ -169,7 +169,7 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
         let mut putative_phasing: Vec<Option<bool>> = Vec::new();
         
 
-        eprintln!("PHASING CONTIG {} with {} kmer positions", contig, kmer_positions.len());
+        eprintln!("PHASING CONTIG {} id {} with {} kmer positions", assembly.contig_names[contig], contig, kmer_positions.len());
 
         let mut phase_blocks: HashMap<usize, (usize, usize)> = HashMap::new(); // map of phase block id to start, stop
         let mut current_phase_block_id: usize = 0;
@@ -210,7 +210,7 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                     let canonical_kmer = Kmers::canonical_pair(kmer);
                     if let Some(counts) = kmer_phasing_consistency_counts.get(&canonical_kmer) {
                         let consistency = is_phasing_consistent(counts, &thresholds);
-                        eprintln!("backwards kmer {}, index {}, counts {:?}, consistency {:?}", canonical_kmer, index, counts, consistency);
+                        eprintln!("backwards kmer {}, position {}, index {}, counts {:?}, consistency {:?}", canonical_kmer, position, index, counts, consistency);
                         if consistency.is_consistent {
                             no_counts_counter = 0;
                             if let Some(overlapping_block) = position_phase_block[index] {
@@ -233,6 +233,8 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                                 canonical_kmer, consistency.cis, &ccs_kmer_mols, &ccs_mols, &mut used_ccs_mols, &kmer_to_index, &kmer_positions, position, params.max_linked_read_dist);
                             add_kmer_and_update_phasing_consistency_counts(&mut kmer_phasing_consistency_counts, 
                                 canonical_kmer, consistency.cis, &txg_kmer_mols, &txg_mols, &mut used_txg_mols, &kmer_to_index, &kmer_positions, position, params.max_linked_read_dist);
+                        } else {
+                            no_counts_counter += 1;
                         }
                     } else {
                         phase_blocks.insert(current_phase_block_id, (current_phase_block_start, current_phase_block_end));
@@ -289,7 +291,7 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                                 let canonical_kmer = Kmers::canonical_pair(kmer);
                                 if let Some(counts) = kmer_phasing_consistency_counts.get(&canonical_kmer) {
                                     let consistency = is_phasing_consistent(counts, &thresholds);
-                                    eprintln!("forwards kmer {}, index {}, counts {:?}, consistency {:?}", canonical_kmer, index, counts, consistency);
+                                    eprintln!("forwards kmer {}, position {}, index {}, counts {:?}, consistency {:?}", canonical_kmer, position, index, counts, consistency);
                                     if consistency.is_consistent {
                                         new_seed_bailout_count = 0;
                                         no_counts_counter = 0;
@@ -310,7 +312,7 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                                             current_phase_block_end = new_end;
                                             //write function to merge blocks and break 'seed_loop
                                             break 'seed_loop;
-                                        }
+                                        } 
                                         putative_phasing[index] = Some(consistency.cis);
                                         add_kmer_and_update_phasing_consistency_counts(&mut kmer_phasing_consistency_counts, 
                                             canonical_kmer, consistency.cis, &ccs_kmer_mols, &ccs_mols, &mut used_ccs_mols, &kmer_to_index, &kmer_positions, position, params.max_linked_read_dist);
@@ -318,7 +320,9 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                                             canonical_kmer, consistency.cis, &txg_kmer_mols, &txg_mols, &mut used_txg_mols, &kmer_to_index, &kmer_positions, position, params.max_linked_read_dist);
                                         current_phase_block_end = index;
                                     } else {
+                                        no_counts_counter += 1;
                                         new_seed_bailout_count += 1;
+                                        eprintln!("checking bailout, new_seed_bailout_count {}, index {}, seed index {}", new_seed_bailout_count, index, seed_index);
                                         if new_seed_bailout_count > 10 && index - seed_index < 20 {
                                             eprintln!("FAILED SEED, do not pass go, do not collect 200$");
                                             for baddex in seed_index..(index + 1) {
@@ -334,6 +338,7 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                                 } else {
                                     eprintln!("forward end kmer {}, index {}, NOCOUNTS", canonical_kmer, index);
                                     no_counts_counter += 1;
+                                    new_seed_bailout_count += 1;
                                     if no_counts_counter > 20 {
                                         for fordex in (index+1).min(kmer_positions.len())..(index+20).min(kmer_positions.len()) {
                                             let (_position, kmer) = kmer_positions[fordex];
