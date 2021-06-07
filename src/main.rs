@@ -202,6 +202,7 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
             if let Some(seed_index) = deferred_seed { // going backwards if we have a deferred_seed
                 eprintln!("continuing backwards at seed index {}", seed_index);
                 deferred_seed = None;
+                no_counts_counter = 0;
                 let mut last_index = seed_index;
                 for index in (0..seed_index).rev() { // going backwards
                     seeder.consume(index);
@@ -274,6 +275,8 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                             eprintln!("bad seed with {:?}", kmer_consistency);
                             continue;
                         } else {
+                            no_counts_counter = 0;
+                            new_seed_bailout_count = 0;
                             kmer_phasing_consistency_counts.clear(); // = HashMap::new();
                             eprintln!("found good seed {} with {:?} at seed index {}", canonical_kmer, kmer_consistency, seed_index);
                             deferred_seed = Some(seed_index.clone()); // start back here when done going forward
@@ -363,7 +366,7 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                     let mut count_vec: Vec<(&usize, &(usize, usize))> = phase_blocks.iter().collect();
                     count_vec.sort_by(|a, b| b.1.cmp(a.1));
                     for (phase_block_id, (start, end)) in count_vec.iter() {
-                        eprintln!("phase block {} goes from {}-{}", phase_block_id, start, end);
+                        eprintln!("phase block {} goes from {}-{}", phase_block_id, kmer_positions[*start].0, kmer_positions[*end].0);
                     }
                     eprintln!("no more seeds, done with contig");
                     break 'outer_loop;
