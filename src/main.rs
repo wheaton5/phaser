@@ -238,16 +238,16 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                         }
                     } else {
                         phase_blocks.insert(current_phase_block_id, (current_phase_block_start, current_phase_block_end));
-                        eprintln!("backwards kmer {}, index {}, NOCOUNTS", canonical_kmer, index);
+                        eprintln!("backwards kmer {}, position {}, index {}, NOCOUNTS", canonical_kmer, position, index);
                         no_counts_counter += 1;
                         if no_counts_counter > 20 {
                             for backdex in ((index-20).max(0)..index).rev() {
                                 let (_position, kmer) = kmer_positions[backdex];
                                 let canonical_kmer = Kmers::canonical_pair(kmer);
                                 if let Some(counts) = kmer_phasing_consistency_counts.get(&canonical_kmer) {
-                                    eprintln!("\treaching backwards just to check counts {} with {:?}", backdex, counts);
+                                    eprintln!("\treaching backwards just to check position {}, index {} with {:?}", position, backdex, counts);
                                 } else {
-                                    eprintln!("\treaching backwards just to check counts {} with NO COUNTS", backdex);
+                                    eprintln!("\treaching backwards just to check position {}, index {} with NO COUNTS", position, backdex);
                                 }
                             }
                             break;
@@ -274,6 +274,7 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                             eprintln!("bad seed with {:?}", kmer_consistency);
                             continue;
                         } else {
+                            kmer_phasing_consistency_counts.clear(); // = HashMap::new();
                             eprintln!("found good seed {} with {:?} at seed index {}", canonical_kmer, kmer_consistency, seed_index);
                             deferred_seed = Some(seed_index.clone()); // start back here when done going forward
                             putative_phasing[seed_index] = Some(true);
@@ -336,17 +337,17 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                                         }
                                     }
                                 } else {
-                                    eprintln!("forward end kmer {}, index {}, NOCOUNTS", canonical_kmer, index);
+                                    eprintln!("forward end kmer {}, position {}, index {}, NOCOUNTS", canonical_kmer, position, index);
                                     no_counts_counter += 1;
                                     new_seed_bailout_count += 1;
                                     if no_counts_counter > 20 {
                                         for fordex in (index+1).min(kmer_positions.len())..(index+20).min(kmer_positions.len()) {
-                                            let (_position, kmer) = kmer_positions[fordex];
+                                            let (position, kmer) = kmer_positions[fordex];
                                             let canonical_kmer = Kmers::canonical_pair(kmer);
                                             if let Some(counts) = kmer_phasing_consistency_counts.get(&canonical_kmer) {
-                                                eprintln!("\treaching forward just to check counts {} with {:?}", fordex, counts);
+                                                eprintln!("\treaching forward just to check position {}, index {} with {:?}", position, fordex, counts);
                                             } else {
-                                                eprintln!("\treaching forward just to check counts {} with NO COUNTS", fordex);
+                                                eprintln!("\treaching forward just to check position {}, index {} with NO COUNTS", position, fordex);
                                             }
                                         }
                                         break 'seed_loop;
