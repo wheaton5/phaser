@@ -55,8 +55,17 @@ fn main() {
     let assembly = load_assembly_kmers(&params.assembly_kmers, &params.assembly_fasta, &kmers);
 
     let sex_contigs = detect_sex_contigs(&assembly, &params);
-    phase(assembly, hic_mols, ccs, txg_barcodes, sex_contigs, &params);
+    let (putative_phasing, contig_chunk_indices) = phase(assembly, hic_mols, ccs, txg_barcodes, sex_contigs, &params);
     //phase(assembly, hic_mols, ccs, sex_contigs, &params);
+    /*
+    output_phased_vcf(
+        &kmers,
+        &params,
+        putative_phasing,
+        &assembly,
+        &contig_chunk_indices,
+    );
+    */
 
 }
 
@@ -134,7 +143,7 @@ fn count_kmer_consistencies(pairwise_consistencies: &HashMap<(i32, i32), [u8;4]>
     pairwise_kmer_consistency_counts
 }
 
-fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex_contigs: HashSet<i32>, params: &Params) {
+fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex_contigs: HashSet<i32>, params: &Params) -> (HashMap<i32, Vec<Option<bool>>>, HashMap<i32, Vec<(usize, usize)>>) {
 //fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, sex_contigs: HashSet<i32>, params: &Params) {
     eprintln!("phasing");
     let hic_kmer_mols = hic_mols.get_kmer_mols();
@@ -157,7 +166,9 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
         min_percent: params.min_phasing_consistency_percent,
         minor_allele_fraction: params.min_minor_allele_fraction,
     };
-    
+    let mut contig_chunks: HashMap<i32, Vec<(usize, usize)>> = HashMap::new();
+    let mut contig_phasing: HashMap<i32, Vec<Option<bool>>> = HashMap::new();
+
 
     for contig in 1..(assembly.contig_kmers.len()+1) {
         if contig > 30 { break } // TODO remove
@@ -382,15 +393,251 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
             min_percent: 0.75,
             minor_allele_fraction: 0.25,
         };
+        let mut disjoint_set: DisjointSet<usize> = DisjointSet::new();
+        for (phase_block_id, (_start, _end)) in phase_blocks.iter() {
+            disjoint_set.make_set(*phase_block_id);
+        }
         for ((phase_block1, phase_block2), counts) in phase_block_consistencies.iter() {
             let consistency = is_phasing_consistent(counts, &hic_thresholds);
             eprintln!("phase block {} and {} are{} phasing consisent in {} with counts {:?}", phase_block1, phase_block2, 
                 match consistency.is_consistent { true => "", false => " not" }, 
                 match consistency.cis { true => "cis", false => "trans"}, counts);
+            if consistency.is_consistent {
+                disjoint_set.union(*phase_block1, *phase_block2).expect("please no");
+            }
         }
-    } // end contig loop 
 
+
+        let mut blocks: Vec<(&usize, &(usize, usize))> = phase_blocks.iter().collect();
+        blocks.sort_by(|a, b| a.1.cmp(b.1));
+        let mut new_blocks: Vec<(usize, usize)> = Vec::new();
+        let (start, end) = blocks[0].1;
+        let mut start = start;
+        let mut end = end;
+        for blockdex in 0..blocks.len() {
+            let (_, new_end) = blocks[blockdex].1;
+            end = new_end;
+            if blockdex + 1 == blocks.len() {
+                new_blocks.push((*start, *end));
+            } else {
+                let block_id1 = *blocks[blockdex].0;
+                let block_id2 = *blocks[blockdex + 1].0;
+                let counts = phase_block_consistencies.get(&(block_id1.min(block_id2), block_id1.max(block_id2))).unwrap_or(&[0;4]);
+                let consistency = is_phasing_consistent(counts, &hic_thresholds);
+                if !consistency.is_consistent {
+                    new_blocks.push((*start, *end));
+                    let (new_start, _) = blocks[blockdex + 1].1;
+                    start = new_start;
+                } else if !consistency.cis {
+                    let (start, end) = *phase_blocks.get(&block_id2).expect("losing my mind if this fails");
+                    for index in start..end {
+                        if let Some(phase) = putative_phasing[index] {
+                            putative_phasing[index] = Some(!phase);
+                        }
+                    }
+                }
+            }
+        }
+
+        /*
+        let mut final_phase_blocks: HashMap<usize, Vec<(usize, bool)>> = HashMap::new();
+        for (phase_block_id, (_start, _end)) in phase_blocks.iter() {
+            let final_block_id = disjoint_set.find(*phase_block_id).expect("i did something wrong");
+            let block = final_phase_blocks.entry(final_block_id).or_insert(Vec::new());
+            if block.len() == 0 {
+                block.push((final_block_id, true))
+            } else {
+                let counts = phase_block_consistencies.get(&(block[0].0.min(*phase_block_id), block[0].0.max(*phase_block_id))).expect("really? no thank you. good bye");
+                let consistency = is_phasing_consistent(counts, &hic_thresholds);
+                if consistency.is_consistent {
+                    eprintln!("PHASE BLOCKS IN THE SAME connected component of hic phasing consistencies are not phasing consistent with counts {:?}", counts)
+                }
+                if consistency.cis {
+                    block.push((*phase_block_id, true));
+                } else {
+                    block.push((*phase_block_id, false));
+                    // update putative_phasing
+                    let (start, end) = *phase_blocks.get(phase_block_id).expect("losing my mind if this fails");
+                    for index in start..end {
+                        if let Some(phase) = putative_phasing[index] {
+                            putative_phasing[index] = Some(!phase);
+                        }
+                    }
+                }
+            }
+        } // NOW WE HAVE FINAL PHASE BLOCKS
+        */
+
+        eprintln!("final phase blocks for contig {}", contig);
+        for (block_id, (start, end)) in new_blocks.iter().enumerate() {
+            eprintln!("final phase block {} {}-{}", block_id, kmer_positions[*start].0, kmer_positions[*end].0);
+        }
+        contig_chunks.insert(contig as i32, new_blocks);
+        contig_phasing.insert(contig as i32, putative_phasing);
+
+    } // end contig loop
+
+    let reader = fasta::Reader::from_file(Path::new(&params.assembly_fasta.to_string()))
+        .expect("fasta not found");
+    let mut writer = fasta::Writer::to_file(Path::new(&format!("{}/breaks.fa", params.output)))
+        .expect("cannot open fasta writer");
+    for record in reader.records() {
+        let record = record.unwrap();
+        let contig_name = record.id().to_string();
+        let contig_id = assembly.contig_ids.get(&contig_name).unwrap();
+
+        if !contig_chunks.contains_key(contig_id) {
+            eprintln!("contig has no chunks??? {}", contig_id);
+            let size = assembly.contig_sizes.get(contig_id).unwrap();
+            let range = contig_chunks.entry(*contig_id).or_insert(Vec::new());
+            range.push((0, *size));
+        }
+        let ranges = contig_chunks.get(contig_id).unwrap();
+
+        for (index, (start, stop)) in ranges.iter().enumerate() {
+            let mut new_contig_name = contig_name.to_string();
+            if ranges.len() > 0 {
+                let list = vec![
+                    new_contig_name,
+                    (index + 1).to_string(),
+                    start.to_string(),
+                    stop.to_string(),
+                ];
+                new_contig_name = list.join("_");
+            }
+            let seq: TextSlice = &record.seq()[*start..*stop];
+            let record = Record::with_attrs(&new_contig_name, None, &seq);
+            writer
+                .write_record(&record)
+                .expect("could not write record");
+        }
+    } 
+    (contig_phasing, contig_chunks)
 }
+
+/*
+fn output_phased_vcf(
+    kmers: &Kmers,
+    params: &Params,
+    contig_phasing: HashMap<i32, Vec<Option<bool>>>,
+    assembly: &Assembly,
+    contig_chunk_indices: &HashMap<i32, Vec<(usize, usize)>>,
+) {
+    let mut output = params.output.to_string();
+    output.push_str("/phasing_breaks.vcf");
+    let f = File::create(output).expect("Unable to create file");
+    let mut f = BufWriter::new(f);
+    let mut phasing: HashMap<i32, Vec<Option<bool>>> = contig_phasing;//HashMap::new();
+    //for (contig, center) in best_centers.iter() {
+    for contig in 1..assembly.contig_names.len() {
+        let contig = &(contig as i32);
+
+        
+        //let contig_phasing = phasing.entry(*contig as i32).or_insert(Vec::new());
+
+        
+        
+        let contig_name = &assembly.contig_names[*contig as usize];
+
+        let chunks = contig_chunk_indices
+            .get(contig)
+            .expect("why do you hate me");
+        let kmer_positions = assembly.contig_kmers.get(contig).expect("nooooo");
+        let chunk_positions: Vec<(usize, usize)> = Vec::new();//contig_chunk_positions.get(contig).expect("noooo");
+        for (start, end) in chunks.iter() {
+            chunk_positions.push((kmer_positions[*start].0, kmer_positions[*end].0));
+        }
+
+        for (chunkdex, (left, right)) in chunks.iter().enumerate() {
+            let left_pos = chunk_positions[chunkdex].0;
+            let right_pos = chunk_positions[chunkdex].1;
+            let chunk_name = vec![
+                contig_name.to_string(),
+                (chunkdex + 1).to_string(),
+                left_pos.to_string(),
+                right_pos.to_string(),
+            ]
+            .join("_");
+            for ldex in *left..*right {
+                //0..center.clusters[0].center.len() {
+                // output is semi-vcf contig\tpos\t.\tREF\tALT\tqual\tfilter\tinfo\tformat\tsample
+
+                //let locus = loci[ldex];
+                let pos = kmer_positions[ldex].0;//locus.position;
+                let reference;
+                let alternate;
+                let flip;
+                match locus.allele {
+                    Allele::Ref => {
+                        reference = kmers.kmers.get(&locus.reference).unwrap().to_string();
+                        alternate = kmers.kmers.get(&locus.alternate).unwrap().to_string();
+                        flip = false;
+                    }
+                    Allele::Alt => {
+                        reference = kmers.kmers.get(&locus.alternate).unwrap().to_string();
+                        alternate = kmers.kmers.get(&locus.reference).unwrap().to_string();
+                        flip = true;
+                    }
+                }
+
+
+                let mut genotype: Vec<String> = Vec::new();
+
+                for cluster in center.clusters.iter() {
+                    let value = cluster.center[ldex];
+                    if value > 0.99 {
+                        if !flip {
+                            genotype.push("1".to_string());
+                        } else {
+                            genotype.push("0".to_string())
+                        }
+                    } else if value < 0.01 {
+                        if !flip {
+                            genotype.push("0".to_string())
+                        } else {
+                            genotype.push("1".to_string());
+                        }
+                    } else {
+                        genotype.push(".".to_string());
+                    }
+                }
+                if genotype[0] == "0" && genotype[1] == "1" {
+                    if !flip {
+                        contig_phasing.push(Some(true));
+                    } else {
+                        contig_phasing.push(Some(false));
+                    }
+                } else if genotype[0] == "1" && genotype[1] == "0" {
+                    if !flip {
+                        contig_phasing.push(Some(false));
+                    } else {
+                        contig_phasing.push(Some(true));
+                    }
+                } else {
+                    contig_phasing.push(None);
+                }
+
+                let genotype = vec![genotype.join("|"), "60".to_string()].join(":");
+                let mut line_vec: Vec<String> = vec![
+                    chunk_name.to_string(),
+                    pos.to_string(),
+                    ".".to_string(),
+                    reference,
+                    alternate,
+                    ".".to_string(),
+                    ".".to_string(),
+                    ".".to_string(),
+                    "GT:PQ".to_string(),
+                    genotype,
+                ];
+                let mut line = line_vec.join("\t");
+                line.push_str("\n");
+                f.write_all(line.as_bytes()).expect("Unable to write data");
+            }
+        }
+    }
+}
+*/
 
 fn merge_phase_blocks(phase_blocks: &mut HashMap<usize, (usize, usize)>, 
     position_phase_block: &mut Vec<Option<usize>>, putative_phasing: &mut Vec<Option<bool>>, 
@@ -676,7 +923,7 @@ fn detect_sex_contigs(assembly: &Assembly, params: &Params) -> HashSet<i32> {
 
     for contig_id in 1..(assembly.contig_names.len()) {
         let size = assembly.contig_sizes.get(&(contig_id as i32)).expect("I am actually going crazy");
-        let kmers = match assembly.molecules.get(&(contig_id as i32)) {
+        let kmers = match assembly.contig_kmers.get(&(contig_id as i32)) {
             Some(x) => x.len(),
             None => 0,
         };
