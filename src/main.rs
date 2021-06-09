@@ -389,23 +389,11 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
         let phase_block_consistencies = get_phase_block_consistencies(&phase_blocks, &putative_phasing, &kmer_positions, &hic_mols, &hic_kmer_mols);
         
         let hic_thresholds = PhasingConsistencyThresholds{
-            min_count: 500,
+            min_count: 20,
             min_percent: 0.75,
             minor_allele_fraction: 0.25,
         };
-        let mut disjoint_set: DisjointSet<usize> = DisjointSet::new();
-        for (phase_block_id, (_start, _end)) in phase_blocks.iter() {
-            disjoint_set.make_set(*phase_block_id);
-        }
-        for ((phase_block1, phase_block2), counts) in phase_block_consistencies.iter() {
-            let consistency = is_phasing_consistent(counts, &hic_thresholds);
-            eprintln!("phase block {} and {} are{} phasing consisent in {} with counts {:?}", phase_block1, phase_block2, 
-                match consistency.is_consistent { true => "", false => " not" }, 
-                match consistency.cis { true => "cis", false => "trans"}, counts);
-            if consistency.is_consistent {
-                disjoint_set.union(*phase_block1, *phase_block2).expect("please no");
-            }
-        }
+ 
 
 
         let mut blocks: Vec<(&usize, &(usize, usize))> = phase_blocks.iter().collect();
