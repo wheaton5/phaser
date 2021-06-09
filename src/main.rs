@@ -416,11 +416,13 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                     new_blocks.push((*start, *end));
                     let (new_start, _) = blocks[blockdex + 1].1;
                     start = new_start;
-                } else if !consistency.cis {
-                    let (start, end) = *phase_blocks.get(&block_id2).expect("losing my mind if this fails");
-                    for index in start..end {
-                        if let Some(phase) = putative_phasing[index] {
+                } else{
+                    if !consistency.cis {
+                        let (start, end) = *phase_blocks.get(&block_id2).expect("losing my mind if this fails");
+                        for index in start..end {
+                            if let Some(phase) = putative_phasing[index] {
                             putative_phasing[index] = Some(!phase);
+                            }
                         }
                     }
                 }
@@ -669,6 +671,7 @@ fn get_phase_block_consistencies(phase_blocks: &HashMap<usize, (usize, usize)>, 
     let mut phase_block_consistencies: HashMap<(usize, usize), [u8; 4]> = HashMap::new();
     let mut blocks: Vec<usize> = Vec::new();
     
+    
     let mut block_kmer_phasings: HashMap<usize, HashMap<i32, bool>> = HashMap::new();
     for (block_id, (start, end)) in phase_blocks.iter() {
         blocks.push(*block_id);
@@ -681,13 +684,17 @@ fn get_phase_block_consistencies(phase_blocks: &HashMap<usize, (usize, usize)>, 
             }
         }
     }
+    blocks.sort_by(|a, b| b.cmp(a));
 
    
 
     for phase_block1 in 0..blocks.len() {
-        let (start1, end1) = phase_blocks.get(&phase_block1).unwrap();
+        let phase_block1 = blocks[phase_block1];
+        //let (start1, end1) = phase_blocks.get(&phase_block1).unwrap();
+
         let block1_phasing = block_kmer_phasings.get(&phase_block1).unwrap();
         for phase_block2 in (phase_block1 + 1)..phase_blocks.len() {
+            let phase_block2 = blocks[phase_block2];
             //let (start2, end2) = phase_blocks[phase_block2];
             let block2_phasing = block_kmer_phasings.get(&phase_block2).unwrap();
             for (kmer1, phase1) in block1_phasing.iter() {
