@@ -508,7 +508,20 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
     (contig_phasing, contig_chunks)
 }
 
-/*
+fn allele(kmer: i32) -> Allele {
+    match kmer.abs() % 2 == 0 {
+        true => Allele::Ref,
+        false => Allele::Alt,
+    }
+}
+
+
+#[derive(Debug, Clone, Copy)]
+enum Allele {
+    Ref,
+    Alt,
+}
+
 fn output_phased_vcf(
     kmers: &Kmers,
     params: &Params,
@@ -527,8 +540,8 @@ fn output_phased_vcf(
 
         
         //let contig_phasing = phasing.entry(*contig as i32).or_insert(Vec::new());
-
         
+        let putative_phasing = phasing.get(contig).expect("really are you kidding me, where did my contig go?");
         
         let contig_name = &assembly.contig_names[*contig as usize];
 
@@ -536,7 +549,7 @@ fn output_phased_vcf(
             .get(contig)
             .expect("why do you hate me");
         let kmer_positions = assembly.contig_kmers.get(contig).expect("nooooo");
-        let chunk_positions: Vec<(usize, usize)> = Vec::new();//contig_chunk_positions.get(contig).expect("noooo");
+        let mut chunk_positions: Vec<(usize, usize)> = Vec::new();//contig_chunk_positions.get(contig).expect("noooo");
         for (start, end) in chunks.iter() {
             chunk_positions.push((kmer_positions[*start].0, kmer_positions[*end].0));
         }
@@ -555,63 +568,51 @@ fn output_phased_vcf(
                 //0..center.clusters[0].center.len() {
                 // output is semi-vcf contig\tpos\t.\tREF\tALT\tqual\tfilter\tinfo\tformat\tsample
 
-                //let locus = loci[ldex];
-                let pos = kmer_positions[ldex].0;//locus.position;
+                let (pos, kmer) = kmer_positions[ldex];
                 let reference;
                 let alternate;
                 let flip;
-                match locus.allele {
+                match allele(kmer) {
                     Allele::Ref => {
-                        reference = kmers.kmers.get(&locus.reference).unwrap().to_string();
-                        alternate = kmers.kmers.get(&locus.alternate).unwrap().to_string();
+                        reference = kmers.kmers.get(&kmer).unwrap().to_string();
+                        alternate = kmers.kmers.get(&Kmers::pair(kmer)).unwrap().to_string();
                         flip = false;
                     }
                     Allele::Alt => {
-                        reference = kmers.kmers.get(&locus.alternate).unwrap().to_string();
-                        alternate = kmers.kmers.get(&locus.reference).unwrap().to_string();
+                        reference = kmers.kmers.get(&Kmers::pair(kmer)).unwrap().to_string();
+                        alternate = kmers.kmers.get(&kmer).unwrap().to_string();
                         flip = true;
                     }
                 }
 
 
-                let mut genotype: Vec<String> = Vec::new();
-
-                for cluster in center.clusters.iter() {
-                    let value = cluster.center[ldex];
-                    if value > 0.99 {
+                let mut final_phasing: Vec<Option<bool>> = Vec::new();
+                let genotype: String;
+                if let Some(phase) = putative_phasing[ldex] {
+                    if phase{
                         if !flip {
-                            genotype.push("1".to_string());
+                            final_phasing.push(Some(true));
+                            genotype = "0|1:60".to_string();
                         } else {
-                            genotype.push("0".to_string())
-                        }
-                    } else if value < 0.01 {
-                        if !flip {
-                            genotype.push("0".to_string())
-                        } else {
-                            genotype.push("1".to_string());
+                            final_phasing.push(Some(false));
+                            genotype = "1|0:60".to_string();
                         }
                     } else {
-                        genotype.push(".".to_string());
-                    }
-                }
-                if genotype[0] == "0" && genotype[1] == "1" {
-                    if !flip {
-                        contig_phasing.push(Some(true));
-                    } else {
-                        contig_phasing.push(Some(false));
-                    }
-                } else if genotype[0] == "1" && genotype[1] == "0" {
-                    if !flip {
-                        contig_phasing.push(Some(false));
-                    } else {
-                        contig_phasing.push(Some(true));
+                        if !flip {
+                            final_phasing.push(Some(false));
+                            genotype = "1|0:60".to_string();
+                        } else {
+                            final_phasing.push(Some(true));
+                            genotype = "0|1:60".to_string();
+                        }
                     }
                 } else {
-                    contig_phasing.push(None);
+                    final_phasing.push(None);
+                    genotype = "./.:15".to_string();
                 }
 
-                let genotype = vec![genotype.join("|"), "60".to_string()].join(":");
-                let mut line_vec: Vec<String> = vec![
+                
+                let line_vec: Vec<String> = vec![
                     chunk_name.to_string(),
                     pos.to_string(),
                     ".".to_string(),
@@ -621,7 +622,7 @@ fn output_phased_vcf(
                     ".".to_string(),
                     ".".to_string(),
                     "GT:PQ".to_string(),
-                    genotype,
+                    genotype.to_string(),
                 ];
                 let mut line = line_vec.join("\t");
                 line.push_str("\n");
@@ -630,7 +631,6 @@ fn output_phased_vcf(
         }
     }
 }
-*/
 
 fn merge_phase_blocks(phase_blocks: &mut HashMap<usize, (usize, usize)>, 
     position_phase_block: &mut Vec<Option<usize>>, putative_phasing: &mut Vec<Option<bool>>, 
