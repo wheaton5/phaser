@@ -172,7 +172,7 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
 
 
     for contig in 1..(assembly.contig_kmers.len()+1) {
-        if contig > 30 { break } // TODO remove
+        //if contig > 30 { break } // TODO remove
         if sex_contigs.contains(&(contig as i32)) { continue; }
         let length = *assembly.contig_sizes.get(&(contig as i32)).unwrap();
         if length <= params.min_contig_length { continue; }
