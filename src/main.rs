@@ -475,6 +475,7 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
         let record = record.unwrap();
         let contig_name = record.id().to_string();
         let contig_id = assembly.contig_ids.get(&contig_name).unwrap();
+        let kmer_positions = assembly.contig_kmers.get(contig_id).expect("don't even");
 
         if !contig_chunks.contains_key(contig_id) {
             eprintln!("contig has no chunks??? {}", contig_id);
@@ -486,6 +487,8 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
 
         for (index, (start, stop)) in ranges.iter().enumerate() {
             let mut new_contig_name = contig_name.to_string();
+            let (start, _) = kmer_positions[*start];
+            let (stop, _) = kmer_positions[*stop];
             if ranges.len() > 0 {
                 let list = vec![
                     new_contig_name,
@@ -495,7 +498,7 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
                 ];
                 new_contig_name = list.join("_");
             }
-            let seq: TextSlice = &record.seq()[*start..*stop];
+            let seq: TextSlice = &record.seq()[start..stop];
             let record = Record::with_attrs(&new_contig_name, None, &seq);
             writer
                 .write_record(&record)
