@@ -451,9 +451,8 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
 
         if !contig_chunks.contains_key(contig_id) {
             eprintln!("contig has no chunks??? {}", contig_id);
-            let size = assembly.contig_sizes.get(contig_id).unwrap();
             let range = contig_chunks.entry(*contig_id).or_insert(Vec::new());
-            range.push((0, *size));
+            range.push((0, kmer_positions.len()-1));
         }
         let ranges = contig_chunks.get(contig_id).unwrap();
 
