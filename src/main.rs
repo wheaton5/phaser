@@ -55,9 +55,10 @@ fn main() {
     let assembly = load_assembly_kmers(&params.assembly_kmers, &params.assembly_fasta, &kmers);
 
     let sex_contigs = detect_sex_contigs(&assembly, &params);
-    let (putative_phasing, contig_chunk_indices) = phase(assembly, hic_mols, ccs, txg_barcodes, sex_contigs, &params);
+
+    let (putative_phasing, contig_chunk_indices) = phase(&assembly, hic_mols, ccs, txg_barcodes, sex_contigs, &params);
     //phase(assembly, hic_mols, ccs, sex_contigs, &params);
-    /*
+    eprintln!("done phasing, writing phased vcf");
     output_phased_vcf(
         &kmers,
         &params,
@@ -65,7 +66,7 @@ fn main() {
         &assembly,
         &contig_chunk_indices,
     );
-    */
+    eprintln!("done");
 
 }
 
@@ -143,7 +144,7 @@ fn count_kmer_consistencies(pairwise_consistencies: &HashMap<(i32, i32), [u8;4]>
     pairwise_kmer_consistency_counts
 }
 
-fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex_contigs: HashSet<i32>, params: &Params) -> (HashMap<i32, Vec<Option<bool>>>, HashMap<i32, Vec<(usize, usize)>>) {
+fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex_contigs: HashSet<i32>, params: &Params) -> (HashMap<i32, Vec<Option<bool>>>, HashMap<i32, Vec<(usize, usize)>>) {
 //fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, sex_contigs: HashSet<i32>, params: &Params) {
     eprintln!("phasing");
     let hic_kmer_mols = hic_mols.get_kmer_mols();
@@ -429,35 +430,6 @@ fn phase(assembly: Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, sex
             }
         }
 
-        /*
-        let mut final_phase_blocks: HashMap<usize, Vec<(usize, bool)>> = HashMap::new();
-        for (phase_block_id, (_start, _end)) in phase_blocks.iter() {
-            let final_block_id = disjoint_set.find(*phase_block_id).expect("i did something wrong");
-            let block = final_phase_blocks.entry(final_block_id).or_insert(Vec::new());
-            if block.len() == 0 {
-                block.push((final_block_id, true))
-            } else {
-                let counts = phase_block_consistencies.get(&(block[0].0.min(*phase_block_id), block[0].0.max(*phase_block_id))).expect("really? no thank you. good bye");
-                let consistency = is_phasing_consistent(counts, &hic_thresholds);
-                if consistency.is_consistent {
-                    eprintln!("PHASE BLOCKS IN THE SAME connected component of hic phasing consistencies are not phasing consistent with counts {:?}", counts)
-                }
-                if consistency.cis {
-                    block.push((*phase_block_id, true));
-                } else {
-                    block.push((*phase_block_id, false));
-                    // update putative_phasing
-                    let (start, end) = *phase_blocks.get(phase_block_id).expect("losing my mind if this fails");
-                    for index in start..end {
-                        if let Some(phase) = putative_phasing[index] {
-                            putative_phasing[index] = Some(!phase);
-                        }
-                    }
-                }
-            }
-        } // NOW WE HAVE FINAL PHASE BLOCKS
-        */
-
         eprintln!("final phase blocks for contig {}", contig);
         for (block_id, (start, end)) in new_blocks.iter().enumerate() {
             eprintln!("final phase block {} {}-{}", block_id, kmer_positions[*start].0, kmer_positions[*end].0);
@@ -533,7 +505,7 @@ fn output_phased_vcf(
     output.push_str("/phasing_breaks.vcf");
     let f = File::create(output).expect("Unable to create file");
     let mut f = BufWriter::new(f);
-    let mut phasing: HashMap<i32, Vec<Option<bool>>> = contig_phasing;//HashMap::new();
+    let phasing: HashMap<i32, Vec<Option<bool>>> = contig_phasing;//HashMap::new();
     //for (contig, center) in best_centers.iter() {
     for contig in 1..assembly.contig_names.len() {
         let contig = &(contig as i32);
