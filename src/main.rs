@@ -514,7 +514,7 @@ fn output_phased_vcf(
     for contig in 1..assembly.contig_names.len() {
         let contig = &(contig as i32);
 
-         let kmer_positions = assembly.contig_kmers.get(contig).expect("nooooo");
+        let kmer_positions = assembly.contig_kmers.get(contig).expect("nooooo");
         //let contig_phasing = phasing.entry(*contig as i32).or_insert(Vec::new());
         let mut empty: Vec<Option<bool>> = Vec::new();
         if !phasing.contains_key(contig) {
@@ -523,16 +523,13 @@ fn output_phased_vcf(
             }   
         }
         let putative_phasing = phasing.get(contig).unwrap_or(&empty);
-        
-        
-        
        
         let contig_name = &assembly.contig_names[*contig as usize];
         let mut chunk_positions: Vec<(usize, usize)> = Vec::new();
         let mut chunks: Vec<(usize, usize)> = Vec::new();
         if !contig_chunk_indices.contains_key(contig) {
             chunk_positions.push((0, *assembly.contig_sizes.get(contig).expect("really?")));
-            chunks.push((0, kmer_positions.len() - 1));
+            chunks.push((0, kmer_positions.len()));
             
         } else {
             let chunk_indices = contig_chunk_indices
@@ -540,7 +537,7 @@ fn output_phased_vcf(
             .expect("why do you hate me");
             for (start, end) in chunk_indices.iter() {
                 chunk_positions.push((kmer_positions[*start].0, kmer_positions[*end].0));
-                chunks.push((*start, *end));
+                chunks.push((*start, *end + 1));
             }
         }
         eprintln!("ok sangjin told me to contig {} kmer_positions.len() {}, chunk_positions {:?}, chunks {:?}", contig, kmer_positions.len(), chunk_positions, chunks);
