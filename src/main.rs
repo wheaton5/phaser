@@ -514,12 +514,19 @@ fn output_phased_vcf(
     for contig in 1..assembly.contig_names.len() {
         let contig = &(contig as i32);
 
-        
+         let kmer_positions = assembly.contig_kmers.get(contig).expect("nooooo");
         //let contig_phasing = phasing.entry(*contig as i32).or_insert(Vec::new());
-        let empty: Vec<Option<bool>> = Vec::new();
+        let mut empty: Vec<Option<bool>> = Vec::new();
+        if !phasing.contains_key(contig) {
+            for _ in kmer_positions.iter() {
+                empty.push(None);
+            }   
+        }
         let putative_phasing = phasing.get(contig).unwrap_or(&empty);
         
-        let kmer_positions = assembly.contig_kmers.get(contig).expect("nooooo");
+        
+        
+       
         let contig_name = &assembly.contig_names[*contig as usize];
         let mut chunk_positions: Vec<(usize, usize)> = Vec::new();
         let mut chunks: Vec<(usize, usize)> = Vec::new();
