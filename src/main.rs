@@ -449,17 +449,22 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
         let contig_id = assembly.contig_ids.get(&contig_name).unwrap();
         let kmer_positions = assembly.contig_kmers.get(contig_id).expect("don't even");
 
+
+        let mut ranges: Vec<(usize, usize)> = Vec::new();
         if !contig_chunks.contains_key(contig_id) {
             eprintln!("contig has no chunks??? {}", contig_id);
-            let range = contig_chunks.entry(*contig_id).or_insert(Vec::new());
-            range.push((0, kmer_positions.len()-1));
+            //let range = contig_chunks.entry(*contig_id).or_insert(Vec::new());
+            ranges.push((0, *assembly.contig_sizes.get(contig_id).expect("bad things happen sometimes")));
+        } else {
+            let ranges_indices = contig_chunks.get(contig_id).unwrap();
+            for (start, stop) in ranges_indices {
+                ranges.push((kmer_positions[*start].0, kmer_positions[*stop].0));
+            }
         }
-        let ranges = contig_chunks.get(contig_id).unwrap();
+        
 
         for (index, (start, stop)) in ranges.iter().enumerate() {
             let mut new_contig_name = contig_name.to_string();
-            let (start, _) = kmer_positions[*start];
-            let (stop, _) = kmer_positions[*stop];
             if ranges.len() > 0 {
                 let list = vec![
                     new_contig_name,
@@ -469,7 +474,7 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
                 ];
                 new_contig_name = list.join("_");
             }
-            let seq: TextSlice = &record.seq()[start..stop];
+            let seq: TextSlice = &record.seq()[*start..*stop];
             let record = Record::with_attrs(&new_contig_name, None, &seq);
             writer
                 .write_record(&record)
