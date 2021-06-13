@@ -519,15 +519,22 @@ fn output_phased_vcf(
         let empty: Vec<Option<bool>> = Vec::new();
         let putative_phasing = phasing.get(contig).unwrap_or(&empty);
         
+        let kmer_positions = assembly.contig_kmers.get(contig).expect("nooooo");
         let contig_name = &assembly.contig_names[*contig as usize];
-
-        let chunks = contig_chunk_indices
+        let mut chunk_positions: Vec<(usize, usize)> = Vec::new();
+        let mut chunks: Vec<(usize, usize)> = Vec::new();
+        if !contig_chunk_indices.contains_key(contig) {
+            chunk_positions.push((0, *assembly.contig_sizes.get(contig).expect("really?")));
+            chunks.push((0, kmer_positions.len() - 1));
+        } else {
+            let chunk_indices = contig_chunk_indices
             .get(contig)
             .expect("why do you hate me");
-        let kmer_positions = assembly.contig_kmers.get(contig).expect("nooooo");
-        let mut chunk_positions: Vec<(usize, usize)> = Vec::new();//contig_chunk_positions.get(contig).expect("noooo");
-        for (start, end) in chunks.iter() {
-            chunk_positions.push((kmer_positions[*start].0, kmer_positions[*end].0));
+            let mut chunk_positions: Vec<(usize, usize)> = Vec::new();//contig_chunk_positions.get(contig).expect("noooo");
+            for (start, end) in chunk_indices.iter() {
+                chunk_positions.push((kmer_positions[*start].0, kmer_positions[*end].0));
+                chunks.push((*start, *end));
+            }
         }
 
         for (chunkdex, (left, right)) in chunks.iter().enumerate() {
