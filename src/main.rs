@@ -516,8 +516,8 @@ fn output_phased_vcf(
 
         
         //let contig_phasing = phasing.entry(*contig as i32).or_insert(Vec::new());
-        
-        let putative_phasing = phasing.get(contig).expect("really are you kidding me, where did my contig go?");
+        let empty: Vec<Option<bool>> = Vec::new();
+        let putative_phasing = phasing.get(contig).unwrap_or(&empty);
         
         let contig_name = &assembly.contig_names[*contig as usize];
 
