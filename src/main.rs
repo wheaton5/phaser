@@ -533,6 +533,7 @@ fn output_phased_vcf(
         if !contig_chunk_indices.contains_key(contig) {
             chunk_positions.push((0, *assembly.contig_sizes.get(contig).expect("really?")));
             chunks.push((0, kmer_positions.len() - 1));
+            
         } else {
             let chunk_indices = contig_chunk_indices
             .get(contig)
@@ -542,6 +543,7 @@ fn output_phased_vcf(
                 chunks.push((*start, *end));
             }
         }
+        eprintln!("ok sangjin told me to contig {} kmer_positions.len() {}, chunk_positions {:?}, chunks {:?}", contig, kmer_positions.len(), chunk_positions, chunks);
 
         for (chunkdex, (left, right)) in chunks.iter().enumerate() {
             let left_pos = chunk_positions[chunkdex].0;
@@ -553,6 +555,7 @@ fn output_phased_vcf(
                 right_pos.to_string(),
             ]
             .join("_");
+            eprintln!("left-right {}-{}", left, right);
             for ldex in *left..*right {
                 //0..center.clusters[0].center.len() {
                 // output is semi-vcf contig\tpos\t.\tREF\tALT\tqual\tfilter\tinfo\tformat\tsample
