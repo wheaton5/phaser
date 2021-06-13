@@ -530,7 +530,6 @@ fn output_phased_vcf(
             let chunk_indices = contig_chunk_indices
             .get(contig)
             .expect("why do you hate me");
-            let mut chunk_positions: Vec<(usize, usize)> = Vec::new();//contig_chunk_positions.get(contig).expect("noooo");
             for (start, end) in chunk_indices.iter() {
                 chunk_positions.push((kmer_positions[*start].0, kmer_positions[*end].0));
                 chunks.push((*start, *end));
