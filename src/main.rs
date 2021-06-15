@@ -515,6 +515,7 @@ fn output_phased_vcf(
         let contig = &(contig as i32);
 
         let kmer_positions = assembly.contig_kmers.get(contig).expect("nooooo");
+        
         //let contig_phasing = phasing.entry(*contig as i32).or_insert(Vec::new());
         let mut empty: Vec<Option<bool>> = Vec::new();
         if !phasing.contains_key(contig) {
@@ -545,6 +546,8 @@ fn output_phased_vcf(
         for (chunkdex, (left, right)) in chunks.iter().enumerate() {
             let left_pos = chunk_positions[chunkdex].0;
             let right_pos = chunk_positions[chunkdex].1;
+            let contig_start_pos = left_pos;
+
             let chunk_name = vec![
                 contig_name.to_string(),
                 (chunkdex + 1).to_string(),
@@ -603,7 +606,7 @@ fn output_phased_vcf(
                 
                 let line_vec: Vec<String> = vec![
                     chunk_name.to_string(),
-                    pos.to_string(),
+                    (pos - contig_start_pos).to_string(),
                     ".".to_string(),
                     reference,
                     alternate,
