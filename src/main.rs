@@ -458,7 +458,10 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
         } else {
             let ranges_indices = contig_chunks.get(contig_id).unwrap();
             for (start, stop) in ranges_indices {
-                ranges.push((kmer_positions[*start].0, kmer_positions[*stop].0));
+                let start_pos = kmer_positions[*start].0 - kmer_positions[*start].0.min(30);
+                let length = assembly.contig_sizes.get(contig_id).unwrap();
+                let end_pos = kmer_positions[*stop].0 + (length - kmer_positions[*stop].0).min(30);
+                ranges.push((start_pos, end_pos));
             }
         }
         
@@ -544,8 +547,9 @@ fn output_phased_vcf(
         eprintln!("ok sangjin told me to contig {} kmer_positions.len() {}, chunk_positions {:?}, chunks {:?}", contig, kmer_positions.len(), chunk_positions, chunks);
 
         for (chunkdex, (left, right)) in chunks.iter().enumerate() {
-            let left_pos = chunk_positions[chunkdex].0;
-            let right_pos = chunk_positions[chunkdex].1;
+            let left_pos = chunk_positions[chunkdex].0 - chunk_positions[chunkdex].0.min(30);
+            let length = assembly.contig_sizes.get(contig).unwrap();
+            let right_pos = chunk_positions[chunkdex].1 + (length - chunk_positions[chunkdex].1).min(30);
             let contig_start_pos = left_pos;
 
             let chunk_name = vec![
