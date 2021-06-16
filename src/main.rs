@@ -341,6 +341,7 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
                                         eprintln!("checking bailout, new_seed_bailout_count {}, index {}, seed index {}", new_seed_bailout_count, index, seed_index);
                                         if new_seed_bailout_count > 10 && index - seed_index < 20 {
                                             eprintln!("FAILED SEED, do not pass go, do not collect 200$");
+                                            deferred_seed = None;
                                             for baddex in seed_index..(index + 1) {
                                                 position_phase_block[baddex] = None;
                                                 putative_phasing[baddex] = None;
