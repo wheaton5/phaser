@@ -569,15 +569,15 @@ fn output_phased_vcf(
                 let reference;
                 let alternate;
                 let flip;
+                reference = kmers.kmers.get(&kmer).unwrap().to_string();
+                alternate = kmers.kmers.get(&Kmers::pair(kmer)).unwrap().to_string();
                 match allele(kmer) {
                     Allele::Ref => {
-                        reference = kmers.kmers.get(&kmer).unwrap().to_string();
-                        alternate = kmers.kmers.get(&Kmers::pair(kmer)).unwrap().to_string();
                         flip = false;
                     }
                     Allele::Alt => {
-                        reference = kmers.kmers.get(&Kmers::pair(kmer)).unwrap().to_string();
-                        alternate = kmers.kmers.get(&kmer).unwrap().to_string();
+                        //reference = kmers.kmers.get(&Kmers::pair(kmer)).unwrap().to_string();
+                        //alternate = kmers.kmers.get(&kmer).unwrap().to_string();
                         flip = true;
                     }
                 }
