@@ -268,9 +268,10 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
                     }
                 }
                 phase_blocks.insert(current_phase_block_id, (current_phase_block_start, current_phase_block_end));
-                eprintln!("backwards end, phase block {} goes from {}-{} indices which is {}-{} bases", current_phase_block_id, 
+                eprintln!("backwards end, phase block {} goes from {}-{} indices which is {}-{} bases, length {}", current_phase_block_id, 
                     current_phase_block_start, current_phase_block_end, 
-                    kmer_positions[current_phase_block_start].0, kmer_positions[current_phase_block_end].0);
+                    kmer_positions[current_phase_block_start].0, kmer_positions[current_phase_block_end].0,
+                    kmer_positions[current_phase_block_end].0 - kmer_positions[current_phase_block_start].0);
                 current_phase_block_id = max_phase_block_id + 1;
                 max_phase_block_id += 1;
             } else {
@@ -358,6 +359,18 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
                                     eprintln!("forward end kmer {}, position {}, index {}, NOCOUNTS", canonical_kmer, position, index);
                                     no_counts_counter += 1;
                                     new_seed_bailout_count += 1;
+                                    if new_seed_bailout_count > 10 && index - seed_index < 20 {
+                                        eprintln!("FAILED SEED, do not pass go, do not collect 200$");
+                                        deferred_seed = None;
+                                        for baddex in seed_index..(index + 1) {
+                                            position_phase_block[baddex] = None;
+                                            putative_phasing[baddex] = None;
+                                            if baddex != seed_index {
+                                                seeder.unconsume(baddex);
+                                            }
+                                        }
+                                        continue 'outer_loop;
+                                    }
                                     if no_counts_counter > 20 {
                                         for fordex in (index+1).min(kmer_positions.len())..(index+20).min(kmer_positions.len()) {
                                             let (position, kmer) = kmer_positions[fordex];
