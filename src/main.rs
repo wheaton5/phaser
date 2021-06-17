@@ -268,7 +268,9 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
                     }
                 }
                 phase_blocks.insert(current_phase_block_id, (current_phase_block_start, current_phase_block_end));
-                eprintln!("backwards end index {}", current_phase_block_start);
+                eprintln!("backwards end, phase block {} goes from {}-{} indices which is {}-{} bases", current_phase_block_id, 
+                    current_phase_block_start, current_phase_block_end, 
+                    kmer_positions[current_phase_block_start].0, kmer_positions[current_phase_block_end].0);
                 current_phase_block_id = max_phase_block_id + 1;
                 max_phase_block_id += 1;
             } else {
@@ -416,9 +418,11 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
                 let consistency = is_phasing_consistent(counts, &hic_thresholds);
                 if !consistency.is_consistent {
                     new_blocks.push((*start, *end));
+                    
                     let (new_start, _) = blocks[blockdex + 1].1;
                     start = new_start;
                 } else{
+                    eprintln!("phase block {} and {} are phasing consistent with {:?}", block_id1, block_id2, counts);
                     if !consistency.cis {
                         let (start, end) = *phase_blocks.get(&block_id2).expect("losing my mind if this fails");
                         for index in start..end {
