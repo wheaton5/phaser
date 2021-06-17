@@ -418,7 +418,7 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
         let mut new_blocks: Vec<(usize, usize)> = Vec::new();
         let (start, end) = blocks[0].1;
         let mut start = start;
-        let mut end = end;
+        let mut end;
         for blockdex in 0..blocks.len() {
             let (_, new_end) = blocks[blockdex].1;
             end = new_end;
@@ -431,16 +431,16 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
                 let consistency = is_phasing_consistent(counts, &hic_thresholds);
                 if !consistency.is_consistent {
                     new_blocks.push((*start, *end));
-                    
+                    eprintln!("phase block {} and {} with ranges {:?} and {:?} are NOT phasing consistent with {:?}", block_id1, block_id2, blocks[blockdex].1, blocks[blockdex + 1].1, counts);
                     let (new_start, _) = blocks[blockdex + 1].1;
                     start = new_start;
                 } else{
-                    eprintln!("phase block {} and {} are phasing consistent with {:?}", block_id1, block_id2, counts);
+                    eprintln!("phase block {} and {} with ranges {:?} and {:?} are phasing consistent with {:?}", block_id1, block_id2, blocks[blockdex].1, blocks[blockdex + 1].1, counts);
                     if !consistency.cis {
                         let (start, end) = *phase_blocks.get(&block_id2).expect("losing my mind if this fails");
                         for index in start..end {
                             if let Some(phase) = putative_phasing[index] {
-                            putative_phasing[index] = Some(!phase);
+                                putative_phasing[index] = Some(!phase);
                             }
                         }
                     }
