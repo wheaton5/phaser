@@ -490,8 +490,8 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
 
 fn allele(kmer: i32) -> Allele {
     match kmer.abs() % 2 == 0 {
-        true => Allele::Ref,
-        false => Allele::Alt,
+        true => Allele::Alt,
+        false => Allele::Ref,
     }
 }
 
