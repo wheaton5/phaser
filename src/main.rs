@@ -407,7 +407,15 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
             } // end forward/backward conditional 
         } // end phase block loop
 
-        let mut phase_block_consistencies = get_phase_block_consistencies(&phase_blocks, &putative_phasing, &kmer_positions, &hic_mols, &hic_kmer_mols);
+        let mut phase_block_indices: HashMap<usize, Vec<usize>> = HashMap::new();
+        for (phase_block_id, (start, end)) in phase_blocks.iter() {
+            let indices = phase_block_indices.entry(*phase_block_id).or_insert(Vec::new());
+            for i in *start..(*end + 1) {
+                indices.push(i);
+            }
+        }
+
+        let mut phase_block_consistencies = get_phase_block_consistencies(&phase_block_indices, &putative_phasing, &kmer_positions, &hic_mols, &hic_kmer_mols);
         
         let hic_thresholds = PhasingConsistencyThresholds{
             min_count: 20,
@@ -423,9 +431,11 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
         }
         ordered_consistencies.sort_by(|a, b| b.1.iter().sum::<u32>().cmp(&a.1.iter().sum::<u32>()));
 
+
+
     
         // need to decide if we want to merge then recompare or just have all vs all then make connected component of phasing consistent stuff
-        let mut any_merged = false; // TODO change to true, just turning this loop off for now.
+        let mut any_merged = true; // TODO change to true, just turning this loop off for now.
         
         while any_merged {
             any_merged = false;
@@ -433,8 +443,25 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
                 let consistency = is_phasing_consistent(counts, &hic_thresholds, true);
                 if consistency.is_consistent {
                     // do some merge process involving phase_blocks, putative_phasing 
+                    eprintln!("merging blocks {} and {} with counts {:?} with sizes {} and {}", block_id1, block_id2, counts, phase_block_indices.get(block_id1).expect("blame richard").len(), phase_block_indices.get(block_id2).expect("blame richard").len());
+                    if !consistency.cis {
+                        for index in phase_block_indices.get(block_id2).expect("i expected otherwise") {
+                            if let Some(phase) = putative_phasing[*index] { putative_phasing[*index] = Some(!phase); }
+                        }
+                    }
+                    let mut hodler: Vec<usize> = Vec::new();
+                    for i in phase_block_indices.get(block_id2).expect("blame sangjin") {
+                        hodler.push(*i);
+                    }
+                    let indices = phase_block_indices.get_mut(block_id1).expect("nope");
+                    for i in hodler {
+                        indices.push(i);
+                    }
+                    phase_block_indices.remove(block_id2);
+                    eprintln!("resulting block {} with length {}", block_id1, phase_block_indices.get(block_id1).expect("blame richard3").len());
+                    
                     // recalculate phase_block_consistencies
-                    let phase_block_consistencies = get_phase_block_consistencies(&phase_blocks, &putative_phasing, &kmer_positions, &hic_mols, &hic_kmer_mols);
+                    let phase_block_consistencies = get_phase_block_consistencies(&phase_block_indices, &putative_phasing, &kmer_positions, &hic_mols, &hic_kmer_mols);
                     ordered_consistencies.clear();
                     for ((block_id1, block_id2), counts) in phase_block_consistencies.iter() {
                         let mut copycounts: [u32;4] = [0;4];
@@ -719,20 +746,20 @@ fn merge_phase_blocks(phase_blocks: &mut HashMap<usize, (usize, usize)>,
     (canonical, new_start, new_end)
 }
 
-fn get_phase_block_consistencies(phase_blocks: &HashMap<usize, (usize, usize)>, putative_phasing: &Vec<Option<bool>>, 
+fn get_phase_block_consistencies(phase_blocks: &HashMap<usize, Vec<usize>>, putative_phasing: &Vec<Option<bool>>, 
     kmer_positions: &Vec<(usize, i32)>, hic_mols: &Mols, hic_kmer_mols: &KmerMols) -> HashMap<(usize, usize), [u32; 4]> {
     let mut phase_block_consistencies: HashMap<(usize, usize), [u32; 4]> = HashMap::new();
     let mut blocks: Vec<usize> = Vec::new();
     
     
     let mut block_kmer_phasings: HashMap<usize, HashMap<i32, bool>> = HashMap::new();
-    for (block_id, (start, end)) in phase_blocks.iter() {
+    for (block_id, indices) in phase_blocks.iter() {
         blocks.push(*block_id);
         let kmer_phasings = block_kmer_phasings.entry(*block_id).or_insert(HashMap::new());
-        for index in *start..*end {
-            let (_pos, kmer) = kmer_positions[index];
+        for index in indices {
+            let (_pos, kmer) = kmer_positions[*index];
             let canonical_kmer = Kmers::canonical_pair(kmer);
-            if let Some(phase) = putative_phasing[index] {
+            if let Some(phase) = putative_phasing[*index] {
                 kmer_phasings.insert(canonical_kmer, phase);
             }
         }
