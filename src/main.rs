@@ -128,8 +128,9 @@ fn count_kmer_consistencies(pairwise_consistencies: &HashMap<(i32, i32), [u8;4]>
         min_percent: params.min_phasing_consistency_percent,
         minor_allele_fraction: params.min_minor_allele_fraction,
     };
+    /* TODO UNCOMMMENT
     for ((k1, k2), counts) in pairwise_consistencies.iter() {
-        let consistency = is_phasing_consistent(counts, &thresholds);
+        let consistency = is_phasing_consistent(counts, &thresholds, false);
         {
             let k1_counts = pairwise_kmer_consistency_counts.entry(*k1).or_insert(0);
             if consistency.is_consistent {
@@ -141,6 +142,9 @@ fn count_kmer_consistencies(pairwise_consistencies: &HashMap<(i32, i32), [u8;4]>
             *k2_counts += 1;
         }
     }
+    */
+    pairwise_kmer_consistency_counts.entry(1).or_insert(1); // TODO REMOVE
+    pairwise_kmer_consistency_counts.entry(2).or_insert(2); // TODO REMOVE
     pairwise_kmer_consistency_counts
 }
 
@@ -172,7 +176,7 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
 
 
     for contig in 1..(assembly.contig_kmers.len()+1) {
-        //if contig > 30 { break } // TODO remove
+        if contig > 1 { break } // TODO remove
         if sex_contigs.contains(&(contig as i32)) { continue; }
         let length = *assembly.contig_sizes.get(&(contig as i32)).unwrap();
         if length <= params.min_contig_length { continue; }
@@ -222,7 +226,7 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
                     let (position, kmer) = kmer_positions[index];
                     let canonical_kmer = Kmers::canonical_pair(kmer);
                     if let Some(counts) = kmer_phasing_consistency_counts.get(&canonical_kmer) {
-                        let consistency = is_phasing_consistent(counts, &thresholds);
+                        let consistency = is_phasing_consistent(counts, &thresholds, false);
                         eprintln!("backwards kmer {}, position {}, index {}, counts {:?}, consistency {:?}", canonical_kmer, position, index, counts, consistency);
                         if consistency.is_consistent {
                             no_counts_counter = 0;
@@ -285,11 +289,13 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
                         let (position, kmer) = kmer_positions[seed_index]; // position is base position, index is the... index
                         let canonical_kmer = Kmers::canonical_pair(kmer.abs());
                         let kmer_consistency = *pairwise_kmer_consistency_counts.get(&canonical_kmer).unwrap_or(&0) as f32;
+                        /* TODO UNCOMMENT
                         if !(kmer_consistency > min_seed_consistency && kmer_consistency < max_seed_consistency) {
                             seeder.consume(seed_index);
                             eprintln!("bad seed with {:?}", kmer_consistency);
                             continue;
                         } else {
+                            */
                             no_counts_counter = 0;
                             new_seed_bailout_count = 0;
                             kmer_phasing_consistency_counts.clear(); // = HashMap::new();
@@ -309,7 +315,7 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
                                 let (position, kmer) = kmer_positions[index];
                                 let canonical_kmer = Kmers::canonical_pair(kmer);
                                 if let Some(counts) = kmer_phasing_consistency_counts.get(&canonical_kmer) {
-                                    let consistency = is_phasing_consistent(counts, &thresholds);
+                                    let consistency = is_phasing_consistent(counts, &thresholds, false);
                                     eprintln!("forwards kmer {}, position {}, index {}, counts {:?}, consistency {:?}", canonical_kmer, position, index, counts, consistency);
                                     if consistency.is_consistent {
                                         new_seed_bailout_count = 0;
@@ -387,7 +393,7 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
                             }
                             eprintln!("end of contig");
                             break 'seed_loop;
-                        }
+                        //} TODO UNCOMMENT
                 } // end forward seed loop
                 // no more seeds
                 if ! any {
@@ -428,7 +434,7 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
                 let block_id1 = *blocks[blockdex].0;
                 let block_id2 = *blocks[blockdex + 1].0;
                 let counts = phase_block_consistencies.get(&(block_id1.min(block_id2), block_id1.max(block_id2))).unwrap_or(&[0;4]);
-                let consistency = is_phasing_consistent(counts, &hic_thresholds);
+                let consistency = is_phasing_consistent(counts, &hic_thresholds, true);
                 if !consistency.is_consistent {
                     new_blocks.push((*start, *end));
                     eprintln!("phase block {} and {} with ranges {:?} and {:?} are NOT phasing consistent with {:?}", block_id1, block_id2, blocks[blockdex].1, blocks[blockdex + 1].1, counts);
@@ -897,27 +903,52 @@ struct PhasingConsistency {
     cis: bool,
 }
 
-fn is_phasing_consistent(counts: &[u8;4], thresholds: &PhasingConsistencyThresholds) -> PhasingConsistency {
-    let cis = (counts[0] + counts[1]) as f32;
-    let trans = (counts[2] + counts[3]) as f32;
-    let total = cis + trans;
-    if cis > trans {
+fn is_phasing_consistent(counts: &[u8;4], thresholds: &PhasingConsistencyThresholds, debug: bool) -> PhasingConsistency {
+    let cis = (counts[0] + counts[1]) as f32; // 3
+    let trans = (counts[2] + counts[3]) as f32; //270
+    let total = cis + trans; // 273
+    if debug {
+        eprintln!("counts {:?}, cis {}, trans {}, total {}", counts, cis, trans, total);
+    }
+    if cis > trans { // false
         let consistent_percentage = cis/total;
+        if debug {
+            eprintln!("consistent percentage cis {} = {}/{}", consistent_percentage, trans, total);
+        }
         if total > thresholds.min_count as f32 && consistent_percentage > thresholds.min_percent {
             let minor_allele = counts[0].min(counts[1]) as f32;
+            if debug {
+                eprintln!("minor_allele {} = {}.min({})", minor_allele, counts[2], counts[3]);
+            }
             if minor_allele/cis > thresholds.minor_allele_fraction {
+                if debug {
+                    eprintln!("return is consistent true, cis true")
+                }
                 return PhasingConsistency{is_consistent: true, cis: true};
             }
         } 
-    } else {
-        let consistent_percentage = trans/total;
-        if total > thresholds.min_count as f32 && consistent_percentage > thresholds.min_percent {
-            let minor_allele = counts[2].min(counts[3]) as f32;
-            if minor_allele/trans > thresholds.minor_allele_fraction {
-                return PhasingConsistency{is_consistent: true, cis: false};
+    } else { // yes
+        let consistent_percentage = trans/total; // 270/273 = 0.989
+        if debug {
+            eprintln!("consistent percentage trans {} = {}/{}", consistent_percentage, trans, total);
+        }
+        if total > thresholds.min_count as f32 && consistent_percentage > thresholds.min_percent { // 273 > 20 && 0.989 > 0.75
+            let minor_allele = counts[2].min(counts[3]) as f32; // 120.min(150) == 120.0
+            if debug {
+                eprintln!("minor_allele {} = {}.min({})", minor_allele, counts[2], counts[3]);
+            }
+            if minor_allele/trans > thresholds.minor_allele_fraction { // 120.0 / 270.0 == .44
+                if debug {
+                    eprintln!("return is consistent true, cis false")
+                }
+                return PhasingConsistency{is_consistent: true, cis: false}; // return is_consistent true, cis false
             }
         } 
     }
+    if debug {
+        eprintln!("return is consistent false cis false");
+    }
+    
     PhasingConsistency{is_consistent: false, cis: false}
 }
 
