@@ -88,8 +88,8 @@ fn get_mean_sd_pairwise_consistencies(pairwise_kmer_consistency_counts: &HashMap
     (mean_phasing_consistency, sd_phasing_consistency, min_seed_consistency, max_seed_consistency)
 }
 
-fn get_pairwise_consistencies(ccs_mols: &Mols) -> HashMap<(i32, i32), [u8; 4]> {
-    let mut pairwise_consistencies: HashMap<(i32, i32), [u8; 4]> = HashMap::new();
+fn get_pairwise_consistencies(ccs_mols: &Mols) -> HashMap<(i32, i32), [u32; 4]> {
+    let mut pairwise_consistencies: HashMap<(i32, i32), [u32; 4]> = HashMap::new();
     for ccs_mol in ccs_mols.get_molecules() {
         for k1dex in 0..ccs_mol.len() {
             let k1 = ccs_mol[k1dex].abs();
@@ -121,14 +121,14 @@ fn get_pairwise_consistencies(ccs_mols: &Mols) -> HashMap<(i32, i32), [u8; 4]> {
     pairwise_consistencies
 }
 
-fn count_kmer_consistencies(pairwise_consistencies: &HashMap<(i32, i32), [u8;4]>, params: &Params) -> HashMap<i32, u32> {
+fn count_kmer_consistencies(pairwise_consistencies: &HashMap<(i32, i32), [u32;4]>, params: &Params) -> HashMap<i32, u32> {
     let mut pairwise_kmer_consistency_counts: HashMap<i32, u32> = HashMap::new();
     let thresholds = PhasingConsistencyThresholds{
         min_count: params.min_phasing_consistency_counts,
         min_percent: params.min_phasing_consistency_percent,
         minor_allele_fraction: params.min_minor_allele_fraction,
     };
-    /* TODO UNCOMMMENT
+    
     for ((k1, k2), counts) in pairwise_consistencies.iter() {
         let consistency = is_phasing_consistent(counts, &thresholds, false);
         {
@@ -142,9 +142,7 @@ fn count_kmer_consistencies(pairwise_consistencies: &HashMap<(i32, i32), [u8;4]>
             *k2_counts += 1;
         }
     }
-    */
-    pairwise_kmer_consistency_counts.entry(1).or_insert(1); // TODO REMOVE
-    pairwise_kmer_consistency_counts.entry(2).or_insert(2); // TODO REMOVE
+    
     pairwise_kmer_consistency_counts
 }
 
@@ -157,7 +155,7 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
     
 
 
-    let pairwise_consistencies: HashMap<(i32, i32), [u8;4]> = get_pairwise_consistencies(&ccs_mols);
+    let pairwise_consistencies: HashMap<(i32, i32), [u32;4]> = get_pairwise_consistencies(&ccs_mols);
 
     // count kmer consistencies to make sure we seed on good kmers
     let pairwise_kmer_consistency_counts: HashMap<i32, u32> = count_kmer_consistencies(&pairwise_consistencies, &params);
@@ -210,7 +208,7 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
         let mut current_phase_block_end = 0;
         let mut max_phase_block_id = 0;
         
-        let mut kmer_phasing_consistency_counts: HashMap<i32, [u8; 4]> = HashMap::new();
+        let mut kmer_phasing_consistency_counts: HashMap<i32, [u32; 4]> = HashMap::new();
 
         let mut no_counts_counter = 0;
         'outer_loop:
@@ -289,13 +287,13 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
                         let (position, kmer) = kmer_positions[seed_index]; // position is base position, index is the... index
                         let canonical_kmer = Kmers::canonical_pair(kmer.abs());
                         let kmer_consistency = *pairwise_kmer_consistency_counts.get(&canonical_kmer).unwrap_or(&0) as f32;
-                        /* TODO UNCOMMENT
+                        
                         if !(kmer_consistency > min_seed_consistency && kmer_consistency < max_seed_consistency) {
                             seeder.consume(seed_index);
                             eprintln!("bad seed with {:?}", kmer_consistency);
                             continue;
                         } else {
-                            */
+                            
                             no_counts_counter = 0;
                             new_seed_bailout_count = 0;
                             kmer_phasing_consistency_counts.clear(); // = HashMap::new();
@@ -393,7 +391,7 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
                             }
                             eprintln!("end of contig");
                             break 'seed_loop;
-                        //} TODO UNCOMMENT
+                        } 
                 } // end forward seed loop
                 // no more seeds
                 if ! any {
@@ -409,14 +407,46 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
             } // end forward/backward conditional 
         } // end phase block loop
 
-        let phase_block_consistencies = get_phase_block_consistencies(&phase_blocks, &putative_phasing, &kmer_positions, &hic_mols, &hic_kmer_mols);
+        let mut phase_block_consistencies = get_phase_block_consistencies(&phase_blocks, &putative_phasing, &kmer_positions, &hic_mols, &hic_kmer_mols);
         
         let hic_thresholds = PhasingConsistencyThresholds{
             min_count: 20,
             min_percent: 0.75,
             minor_allele_fraction: 0.25,
         };
- 
+
+        let mut ordered_consistencies: Vec<((usize, usize), [u32; 4])> = Vec::new();
+        for ((block_id1, block_id2), counts) in phase_block_consistencies.iter() {
+            let mut copycounts: [u32;4] = [0;4];
+            for i in 0..4 { copycounts[i] = counts[i]; }
+            ordered_consistencies.push(((*block_id1, *block_id2), copycounts));
+        }
+        ordered_consistencies.sort_by(|a, b| b.1.iter().sum::<u32>().cmp(&a.1.iter().sum::<u32>()));
+
+    
+        // need to decide if we want to merge then recompare or just have all vs all then make connected component of phasing consistent stuff
+        let mut any_merged = false; // TODO change to true, just turning this loop off for now.
+        
+        while any_merged {
+            any_merged = false;
+            for ((block_id1, block_id2), counts) in ordered_consistencies.iter() {
+                let consistency = is_phasing_consistent(counts, &hic_thresholds, true);
+                if consistency.is_consistent {
+                    // do some merge process involving phase_blocks, putative_phasing 
+                    // recalculate phase_block_consistencies
+                    let phase_block_consistencies = get_phase_block_consistencies(&phase_blocks, &putative_phasing, &kmer_positions, &hic_mols, &hic_kmer_mols);
+                    ordered_consistencies.clear();
+                    for ((block_id1, block_id2), counts) in phase_block_consistencies.iter() {
+                        let mut copycounts: [u32;4] = [0;4];
+                        for i in 0..4 { copycounts[i] = counts[i]; }
+                        ordered_consistencies.push(((*block_id1, *block_id2), copycounts));
+                    }
+                    ordered_consistencies.sort_by(|a, b| b.1.iter().sum::<u32>().cmp(&a.1.iter().sum::<u32>()));
+                    any_merged = true;
+                    break;
+                }
+            }
+        }
 
 
         let mut blocks: Vec<(&usize, &(usize, usize))> = phase_blocks.iter().collect();
@@ -690,8 +720,8 @@ fn merge_phase_blocks(phase_blocks: &mut HashMap<usize, (usize, usize)>,
 }
 
 fn get_phase_block_consistencies(phase_blocks: &HashMap<usize, (usize, usize)>, putative_phasing: &Vec<Option<bool>>, 
-    kmer_positions: &Vec<(usize, i32)>, hic_mols: &Mols, hic_kmer_mols: &KmerMols) -> HashMap<(usize, usize), [u8; 4]> {
-    let mut phase_block_consistencies: HashMap<(usize, usize), [u8; 4]> = HashMap::new();
+    kmer_positions: &Vec<(usize, i32)>, hic_mols: &Mols, hic_kmer_mols: &KmerMols) -> HashMap<(usize, usize), [u32; 4]> {
+    let mut phase_block_consistencies: HashMap<(usize, usize), [u32; 4]> = HashMap::new();
     let mut blocks: Vec<usize> = Vec::new();
     
     
@@ -716,12 +746,12 @@ fn get_phase_block_consistencies(phase_blocks: &HashMap<usize, (usize, usize)>, 
         //let (start1, end1) = phase_blocks.get(&phase_block1).unwrap();
 
         let block1_phasing = block_kmer_phasings.get(&phase_block1).unwrap();
-        for phase_block2 in (phase_block1 + 1)..phase_blocks.len() {
+        for phase_block2 in (phase_block1 + 1)..blocks.len() {
             let phase_block2 = blocks[phase_block2];
             //let (start2, end2) = phase_blocks[phase_block2];
             let block2_phasing = block_kmer_phasings.get(&phase_block2).unwrap();
             for (kmer1, phase1) in block1_phasing.iter() {
-                let mut phase1 = *phase1;
+                let phase1 = *phase1;
                 for mol in hic_kmer_mols.get_mols(*kmer1) {
                     for kmer2 in hic_mols.get_molecule_kmers(*mol) {
                         if let Some(phase2) = block2_phasing.get(kmer2) {
@@ -776,7 +806,7 @@ struct PhasingConsistencyThresholds {
     minor_allele_fraction: f32,
 }
 
-fn increment_consistency_counts(phase: bool, allele: i32, counts: &mut [u8;4]) {
+fn increment_consistency_counts(phase: bool, allele: i32, counts: &mut [u32;4]) {
     let allele = allele.abs() % 2 == 1;
     if phase && allele {
         counts[0] += 1;
@@ -790,7 +820,7 @@ fn increment_consistency_counts(phase: bool, allele: i32, counts: &mut [u8;4]) {
 }
 
 
-fn add_kmer_and_update_phasing_consistency_counts(kmer_phasing_consistency_counts: &mut HashMap<i32, [u8;4]>, 
+fn add_kmer_and_update_phasing_consistency_counts(kmer_phasing_consistency_counts: &mut HashMap<i32, [u32;4]>, 
     kmer: i32, cis: bool, kmer_mols: &KmerMols, mols: &Mols, used: &mut BitSet, kmer_to_index: &HashMap<i32, usize>,
     kmer_positions: &Vec<(usize, i32)>, current_position: usize, max_distance: usize) {
     for moldex in kmer_mols.get_mols(kmer.abs()) { // loop over molecules which have kmer then loop over molecules that have the pair
@@ -903,7 +933,7 @@ struct PhasingConsistency {
     cis: bool,
 }
 
-fn is_phasing_consistent(counts: &[u8;4], thresholds: &PhasingConsistencyThresholds, debug: bool) -> PhasingConsistency {
+fn is_phasing_consistent(counts: &[u32;4], thresholds: &PhasingConsistencyThresholds, debug: bool) -> PhasingConsistency {
     let cis = (counts[0] + counts[1]) as f32; // 3
     let trans = (counts[2] + counts[3]) as f32; //270
     let total = cis + trans; // 273
