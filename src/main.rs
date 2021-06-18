@@ -415,7 +415,7 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
             }
         }
 
-        let mut phase_block_consistencies = get_phase_block_consistencies(&phase_block_indices, &putative_phasing, &kmer_positions, &hic_mols, &hic_kmer_mols);
+        let phase_block_consistencies = get_phase_block_consistencies(&phase_block_indices, &putative_phasing, &kmer_positions, &hic_mols, &hic_kmer_mols);
         
         let hic_thresholds = PhasingConsistencyThresholds{
             min_count: 20,
@@ -475,48 +475,10 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
             }
         }
 
-
-        let mut blocks: Vec<(&usize, &(usize, usize))> = phase_blocks.iter().collect();
-        blocks.sort_by(|a, b| a.1.cmp(b.1));
-        let mut new_blocks: Vec<(usize, usize)> = Vec::new();
-        let (start, end) = blocks[0].1;
-        let mut start = start;
-        let mut end;
-        for blockdex in 0..blocks.len() {
-            let (_, new_end) = blocks[blockdex].1;
-            end = new_end;
-            if blockdex + 1 == blocks.len() {
-                new_blocks.push((*start, *end));
-            } else {
-                let block_id1 = *blocks[blockdex].0;
-                let block_id2 = *blocks[blockdex + 1].0;
-                let counts = phase_block_consistencies.get(&(block_id1.min(block_id2), block_id1.max(block_id2))).unwrap_or(&[0;4]);
-                let consistency = is_phasing_consistent(counts, &hic_thresholds, true);
-                if !consistency.is_consistent {
-                    new_blocks.push((*start, *end));
-                    eprintln!("phase block {} and {} with ranges {:?} and {:?} are NOT phasing consistent with {:?}", block_id1, block_id2, blocks[blockdex].1, blocks[blockdex + 1].1, counts);
-                    let (new_start, _) = blocks[blockdex + 1].1;
-                    start = new_start;
-                } else{
-                    eprintln!("phase block {} and {} with ranges {:?} and {:?} are phasing consistent with {:?}", block_id1, block_id2, blocks[blockdex].1, blocks[blockdex + 1].1, counts);
-                    if !consistency.cis {
-                        let (start, end) = *phase_blocks.get(&block_id2).expect("losing my mind if this fails");
-                        for index in start..end {
-                            if let Some(phase) = putative_phasing[index] {
-                                putative_phasing[index] = Some(!phase);
-                            }
-                        }
-                    }
-                }
-            }
+        for (block_id, block_indices) in phase_block_indices.iter() {
+            eprintln!("contig {} final block id {} with size {}", contig, block_id, block_indices.len());
         }
-
-        eprintln!("final phase blocks for contig {}", contig);
-        for (block_id, (start, end)) in new_blocks.iter().enumerate() {
-            eprintln!("final phase block {} {}-{}", block_id, kmer_positions[*start].0, kmer_positions[*end].0);
-        }
-        contig_chunks.insert(contig as i32, new_blocks);
-        contig_phasing.insert(contig as i32, putative_phasing);
+        
 
     } // end contig loop
 
