@@ -443,7 +443,9 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
                 let consistency = is_phasing_consistent(counts, &hic_thresholds, true);
                 if consistency.is_consistent {
                     // do some merge process involving phase_blocks, putative_phasing 
-                    eprintln!("merging blocks {} and {} with counts {:?} with sizes {} and {}", block_id1, block_id2, counts, phase_block_indices.get(block_id1).expect("blame richard").len(), phase_block_indices.get(block_id2).expect("blame richard").len());
+                    eprintln!("merging blocks {} and {} with counts {:?} with sizes {} and {}", 
+                        block_id1, block_id2, counts, phase_block_indices.get(block_id1).expect("blame richard").len(), 
+                        phase_block_indices.get(block_id2).expect("blame richard").len());
                     if !consistency.cis {
                         for index in phase_block_indices.get(block_id2).expect("i expected otherwise") {
                             if let Some(phase) = putative_phasing[*index] { putative_phasing[*index] = Some(!phase); }
@@ -471,7 +473,28 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
                     ordered_consistencies.sort_by(|a, b| b.1.iter().sum::<u32>().cmp(&a.1.iter().sum::<u32>()));
                     any_merged = true;
                     break;
+                } else {
+                    eprintln!("NOT merging blocks {} and {} with counts {:?} with sizes {} and {}", 
+                        block_id1, block_id2, counts, phase_block_indices.get(block_id1).expect("blame richard").len(), 
+                            phase_block_indices.get(block_id2).expect("blame richard").len());
+                    let mut min1 = usize::MAX;
+                    let mut min2 = usize::MAX;
+                    let mut max1 = 0;
+                    let mut max2 = 0;
+                    for index in phase_block_indices.get(block_id1).unwrap().iter() {
+
+                        min1 = min1.min(kmer_positions[*index].0);
+                        max1 = max1.max(kmer_positions[*index].0);
+                    }
+                    for index in phase_block_indices.get(block_id2).unwrap().iter() {
+
+                        min2 = min2.min(kmer_positions[*index].0);
+                        max2 = max2.max(kmer_positions[*index].0);
+                    }
+                    eprintln!("\tout of curiosity the position ranges for block {} and {} are {}-{} and {}-{}", block_id1, block_id2, min1, max1, min2, max2);
+                    
                 }
+
             }
         }
 
@@ -726,7 +749,7 @@ fn get_phase_block_consistencies(phase_blocks: &HashMap<usize, Vec<usize>>, puta
             }
         }
     }
-    blocks.sort_by(|a, b| b.cmp(a));
+    blocks.sort_by(|a, b| a.cmp(b));
 
    
 
