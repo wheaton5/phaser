@@ -749,7 +749,7 @@ fn get_phase_block_consistencies(phase_blocks: &HashMap<usize, Vec<usize>>, puta
             }
         }
     }
-    blocks.sort_by(|a, b| a.cmp(b));
+    blocks.sort_by(|a, b| b.cmp(a));
 
    
 
