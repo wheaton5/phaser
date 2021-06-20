@@ -730,13 +730,13 @@ fn get_phase_block_consistencies(phase_blocks: &HashMap<usize, Vec<usize>>, puta
 
    
 
-    for phase_block1 in 0..blocks.len() {
-        let phase_block1 = blocks[phase_block1];
+    for phase1_blockdex in 0..blocks.len() {
+        let phase_block1 = blocks[phase1_blockdex];
         //let (start1, end1) = phase_blocks.get(&phase_block1).unwrap();
 
         let block1_phasing = block_kmer_phasings.get(&phase_block1).unwrap();
-        for phase_block2 in (phase_block1 + 1)..blocks.len() {
-            let phase_block2 = blocks[phase_block2];
+        for phase2_blockdex in (phase1_blockdex + 1)..blocks.len() {
+            let phase_block2 = blocks[phase2_blockdex];
             //let (start2, end2) = phase_blocks[phase_block2];
             let block2_phasing = block_kmer_phasings.get(&phase_block2).unwrap();
             for (kmer1, phase1) in block1_phasing.iter() {
