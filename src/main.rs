@@ -417,6 +417,7 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
 
         let phase_block_consistencies = get_phase_block_consistencies(&phase_block_indices, &putative_phasing, &kmer_positions, &hic_mols, &hic_kmer_mols);
         
+        eprintln!("phase_block_consistencies.len() {}", phase_block_consistencies.len());
         let hic_thresholds = PhasingConsistencyThresholds{
             min_count: 20,
             min_percent: 0.75,
