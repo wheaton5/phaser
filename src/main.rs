@@ -214,7 +214,7 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
         'outer_loop:
         loop { // loop over multiple phase blocks
             if let Some(seed_index) = deferred_seed { // going backwards if we have a deferred_seed
-                eprintln!("continuing backwards at seed index {}", seed_index);
+                eprintln!("continuing backwards in phase block {} at seed index {}", current_phase_block_id, seed_index);
                 deferred_seed = None;
                 no_counts_counter = 0;
                 let mut last_index = seed_index;
@@ -297,7 +297,7 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
                             no_counts_counter = 0;
                             new_seed_bailout_count = 0;
                             kmer_phasing_consistency_counts.clear(); // = HashMap::new();
-                            eprintln!("found good seed {} with {:?} at seed index {}", canonical_kmer, kmer_consistency, seed_index);
+                            eprintln!("starting phase block {} found good seed {} with {:?} at seed index {}", current_phase_block_id, canonical_kmer, kmer_consistency, seed_index);
                             deferred_seed = Some(seed_index.clone()); // start back here when done going forward
                             putative_phasing[seed_index] = Some(true);
                             add_kmer_and_update_phasing_consistency_counts(&mut kmer_phasing_consistency_counts, 
