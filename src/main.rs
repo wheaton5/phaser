@@ -275,7 +275,7 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
                             no_counts_counter += 1;
                         }
                     } else {
-                        phase_blocks.insert(current_phase_block_id, (current_phase_block_start, current_phase_block_end));
+                        //phase_blocks.insert(current_phase_block_id, (current_phase_block_start, current_phase_block_end));
                         eprintln!("backwards kmer {}, position {}, index {}, NOCOUNTS", canonical_kmer, position, index);
                         no_counts_counter += 1;
                         if no_counts_counter > 20 {
