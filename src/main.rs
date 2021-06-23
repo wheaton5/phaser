@@ -269,11 +269,25 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
                         }
                     }
                 }
-                phase_blocks.insert(current_phase_block_id, (current_phase_block_start, current_phase_block_end));
-                eprintln!("backwards end, phase block {} goes from {}-{} indices which is {}-{} bases, length {}", current_phase_block_id, 
-                    current_phase_block_start, current_phase_block_end, 
-                    kmer_positions[current_phase_block_start].0, kmer_positions[current_phase_block_end].0,
-                    kmer_positions[current_phase_block_end].0 - kmer_positions[current_phase_block_start].0);
+                let total = (current_phase_block_end-current_phase_block_start) as f32;
+                let mut phased = 0.0;
+                for index in current_phase_block_start..current_phase_block_end {
+                    if let Some(_) = putative_phasing[index] { phased += 1.0; }
+                }
+                if phased / total > 0.65 {
+                    phase_blocks.insert(current_phase_block_id, (current_phase_block_start, current_phase_block_end));
+                    eprintln!("backwards end, phase block {} goes from {}-{} indices which is {}-{} bases, length {}", current_phase_block_id, 
+                        current_phase_block_start, current_phase_block_end, 
+                        kmer_positions[current_phase_block_start].0, kmer_positions[current_phase_block_end].0,
+                        kmer_positions[current_phase_block_end].0 - kmer_positions[current_phase_block_start].0);
+                } else {
+                    eprintln!("backwards end, but this was a sucky phase block and we are dropping it, id {}, from {}-{} indices which is {}-{} length {} and had {}% phased", current_phase_block_id, 
+                        current_phase_block_start, current_phase_block_end, 
+                        kmer_positions[current_phase_block_start].0, kmer_positions[current_phase_block_end].0,
+                        kmer_positions[current_phase_block_end].0 - kmer_positions[current_phase_block_start].0, phased/total);
+                }
+                
+                
                 current_phase_block_id = max_phase_block_id + 1;
                 max_phase_block_id += 1;
             } else {
