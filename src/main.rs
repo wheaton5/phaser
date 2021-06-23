@@ -88,37 +88,60 @@ fn get_mean_sd_pairwise_consistencies(pairwise_kmer_consistency_counts: &HashMap
     (mean_phasing_consistency, sd_phasing_consistency, min_seed_consistency, max_seed_consistency)
 }
 
-fn get_pairwise_consistencies(ccs_mols: &Mols) -> HashMap<(i32, i32), [u32; 4]> {
+fn get_pairwise_consistencies(ccs_mols: &Mols, assembly: &Assembly) -> HashMap<(i32, i32), [u32; 4]> {
     let mut pairwise_consistencies: HashMap<(i32, i32), [u32; 4]> = HashMap::new();
     for ccs_mol in ccs_mols.get_molecules() {
         for k1dex in 0..ccs_mol.len() {
             let k1 = ccs_mol[k1dex].abs();
-            for k2dex in k1dex..ccs_mol.len() {
-                let k2 = ccs_mol[k2dex].abs();
-                let mut key1 = k1.min(k2); // making the key in the hashtable canonical for which one is first and which one is second in the tuple
-                let mut key2 = k1.max(k2);
-                if key1 % 2 == 0 { // making the key in the hashtable canonical for which allele is used as the key
-                    key1 = key1 - 1;
-                }
-                if key2 % 2 == 0 {
-                    key2 = key2 - 1;
-                }
-                let counts = pairwise_consistencies.entry((key1, key2)).or_insert([0;4]);
-                let k1_ref = k1 % 2 == 0; // which allele ref or alt, pairs are 1,2   3,4 etc
-                let k2_ref = k2 % 2 == 0;
-                if k1_ref && k2_ref {
-                    counts[0] += 1;
-                } else if !k1_ref && !k2_ref {
-                    counts[1] += 1;
-                } else if k1_ref && !k2_ref {
-                    counts[2] += 1;
-                } else {
-                    counts[3] += 1;
+            if let Some((contig1, pos1)) = kmer_contig_position(k1, assembly){
+                for k2dex in k1dex..ccs_mol.len() {
+                    let k2 = ccs_mol[k2dex].abs();
+                    if let Some((contig2, pos2)) = kmer_contig_position(k2, assembly) {
+                        if contig1 != contig2 || pos1.max(pos2) - pos1.min(pos2) > 50000 {
+                            continue;
+                        }
+                        let mut key1 = k1.min(k2); // making the key in the hashtable canonical for which one is first and which one is second in the tuple
+                        let mut key2 = k1.max(k2);
+                        if key1 % 2 == 0 { // making the key in the hashtable canonical for which allele is used as the key
+                            key1 = key1 - 1;
+                        }
+                        if key2 % 2 == 0 {
+                            key2 = key2 - 1;
+                        }
+                        let counts = pairwise_consistencies.entry((key1, key2)).or_insert([0;4]);
+                        let k1_ref = k1 % 2 == 0; // which allele ref or alt, pairs are 1,2   3,4 etc
+                        let k2_ref = k2 % 2 == 0;
+                        if k1_ref && k2_ref {
+                            counts[0] += 1;
+                        } else if !k1_ref && !k2_ref {
+                            counts[1] += 1;
+                        } else if k1_ref && !k2_ref {
+                            counts[2] += 1;
+                        } else {
+                            counts[3] += 1;
+                        }
+                    }
+                    
+                    
                 }
             }
+            
         }
     }
     pairwise_consistencies
+}
+
+fn kmer_contig_position(kmer: i32, assembly: &Assembly) -> Option<(i32, usize)> {
+    if let Some((contig_id, number_seen, _order, position)) = assembly.variants.get(&kmer.abs()) {
+        if *number_seen == 1 {
+            return Some((*contig_id, *position));
+        }
+    } else if let Some((contig_id, number_seen, _order, position)) = assembly.variants.get(&Kmers::pair(kmer.abs())) {
+        if *number_seen == 1 {
+            return Some((*contig_id, *position));
+        }
+    }
+    None
 }
 
 fn count_kmer_consistencies(pairwise_consistencies: &HashMap<(i32, i32), [u32;4]>, params: &Params) -> HashMap<i32, u32> {
@@ -155,7 +178,7 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
     
 
 
-    let pairwise_consistencies: HashMap<(i32, i32), [u32;4]> = get_pairwise_consistencies(&ccs_mols);
+    let pairwise_consistencies: HashMap<(i32, i32), [u32;4]> = get_pairwise_consistencies(&ccs_mols, assembly);
 
     // count kmer consistencies to make sure we seed on good kmers
     let pairwise_kmer_consistency_counts: HashMap<i32, u32> = count_kmer_consistencies(&pairwise_consistencies, &params);
@@ -274,12 +297,12 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
                 for index in current_phase_block_start..current_phase_block_end {
                     if let Some(_) = putative_phasing[index] { phased += 1.0; }
                 }
-                if phased / total > 0.65 {
+                if phased > 500.0 {
                     phase_blocks.insert(current_phase_block_id, (current_phase_block_start, current_phase_block_end));
-                    eprintln!("backwards end, phase block {} goes from {}-{} indices which is {}-{} bases, length {}", current_phase_block_id, 
+                    eprintln!("backwards end, phase block {} goes from {}-{} indices which is {}-{} bases, length {}, {}% phased", current_phase_block_id, 
                         current_phase_block_start, current_phase_block_end, 
                         kmer_positions[current_phase_block_start].0, kmer_positions[current_phase_block_end].0,
-                        kmer_positions[current_phase_block_end].0 - kmer_positions[current_phase_block_start].0);
+                        kmer_positions[current_phase_block_end].0 - kmer_positions[current_phase_block_start].0, phased/total);
                 } else {
                     eprintln!("backwards end, but this was a sucky phase block and we are dropping it, id {}, from {}-{} indices which is {}-{} length {} and had {}% phased", current_phase_block_id, 
                         current_phase_block_start, current_phase_block_end, 
@@ -1176,7 +1199,7 @@ fn load_params() -> Params {
     let break_window = break_window.to_string().parse::<usize>().unwrap();
     eprintln!("break window {}", break_window);
 
-    let min_minor_allele_fraction = params.value_of("min_minor_allele_fraction").unwrap_or("0.15");
+    let min_minor_allele_fraction = params.value_of("min_minor_allele_fraction").unwrap_or("0.25");
     let min_minor_allele_fraction = min_minor_allele_fraction.to_string().parse::<f32>().unwrap();
 
     let min_phasing_consistency_counts = params.value_of("min_phasing_consistency_counts").unwrap_or("8");

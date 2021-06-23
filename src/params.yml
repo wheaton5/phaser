@@ -96,7 +96,7 @@ args:
         long: min_minor_allele_fraction
         required: false
         takes_value: true
-        help: minimum minor allele fraction to be counted for phasing consistency -- if low it might not be actually heterozygous (default 0.15)
+        help: minimum minor allele fraction to be counted for phasing consistency -- if low it might not be actually heterozygous (default 0.25)
     - min_phasing_consistency_counts:
         long: min_phasing_consistency_counts
         required: false
