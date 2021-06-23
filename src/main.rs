@@ -94,7 +94,7 @@ fn get_pairwise_consistencies(ccs_mols: &Mols, assembly: &Assembly) -> HashMap<(
         for k1dex in 0..ccs_mol.len() {
             let k1 = ccs_mol[k1dex].abs();
             if let Some((contig1, pos1)) = kmer_contig_position(k1, assembly){
-                for k2dex in k1dex..ccs_mol.len() {
+                for k2dex in (k1dex+1)..ccs_mol.len() {
                     let k2 = ccs_mol[k2dex].abs();
                     if let Some((contig2, pos2)) = kmer_contig_position(k2, assembly) {
                         if contig1 != contig2 || pos1.max(pos2) - pos1.min(pos2) > 50000 {
