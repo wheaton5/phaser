@@ -197,7 +197,7 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
 
 
     for contig in 1..(assembly.contig_kmers.len()+1) {
-        if contig > 1 { break } // TODO remove
+        //if contig > 1 { break } // TODO remove
         if sex_contigs.contains(&(contig as i32)) { continue; }
         let length = *assembly.contig_sizes.get(&(contig as i32)).unwrap();
         if length <= params.min_contig_length { continue; }
@@ -297,7 +297,7 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
                 for index in current_phase_block_start..current_phase_block_end {
                     if let Some(_) = putative_phasing[index] { phased += 1.0; }
                 }
-                if phased > 500.0 {
+                if phased > 200.0 {
                     phase_blocks.insert(current_phase_block_id, (current_phase_block_start, current_phase_block_end));
                     eprintln!("backwards end, phase block {} goes from {}-{} indices which is {}-{} bases, length {}, {}% phased", current_phase_block_id, 
                         current_phase_block_start, current_phase_block_end, 
