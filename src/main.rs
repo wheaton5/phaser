@@ -1069,15 +1069,18 @@ fn detect_sex_contigs(assembly: &Assembly, ccs_mols: &Mols, params: &Params) -> 
             let (pos1, kmer1) = kmer_positions[index1];
             let mut kmer1_consistent = 0.0;
             let mut kmer1_inconsistent = 0.0;
-            for index2 in (index1 + 1)..(index1 + 100) {
+            for index2 in (index1 + 1)..(index1 + 100).min(kmer_positions.len()) {
                 let (pos2, kmer2) = kmer_positions[index2];
                 if pos2 - pos1 < 5000 {
                     let count = pairwise_consistencies.get(&(kmer1.abs().min(kmer2.abs()), kmer1.abs().max(kmer2.abs()))).unwrap_or(&[0;4]);
                     let consistency = is_phasing_consistent(count, &thresholds, false);
+                    let mut text = "NOT consistent";
+                    if consistency.is_consistent { text = "IS consistent"; }
+                    eprintln!("\t{}-{} = {:?} {}",pos1, pos2, count, text);
                     if consistency.is_consistent { kmer1_consistent += 1.0; consistent += 1; } else { kmer1_inconsistent += 1.0; inconsistent += 1; }
                 } else { break; }
             }
-            if kmer1_consistent/(kmer1_consistent+ kmer1_inconsistent) > 0.1 { consistent_kmers += 1; } else { inconsistent_kmers += 1; }
+            if kmer1_consistent + kmer1_inconsistent == 0.0 || kmer1_consistent/(kmer1_consistent + kmer1_inconsistent) > 0.1 { consistent_kmers += 1; } else { inconsistent_kmers += 1; }
             eprintln!("contig {} kmer index {} position {} consistent with {} and inconsistent with {} so {}%", contig_id, index1, pos1, kmer1_consistent, kmer1_inconsistent, kmer1_consistent/(kmer1_consistent+kmer1_inconsistent));
 
         }
