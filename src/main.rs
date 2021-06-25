@@ -1047,6 +1047,7 @@ fn detect_sex_contigs(assembly: &Assembly, ccs_mols: &Mols, params: &Params) -> 
     let mut density_sum: f32 = 0.0;
 
     let pairwise_consistencies: HashMap<(i32, i32), [u32;4]> = get_pairwise_consistencies(&ccs_mols, assembly, true);
+    eprintln!("pairwise done with {} entries", pairwise_consistencies.len());
     let thresholds = PhasingConsistencyThresholds {
         min_count: params.min_phasing_consistency_counts,
         min_percent: params.min_phasing_consistency_percent,
@@ -1069,7 +1070,9 @@ fn detect_sex_contigs(assembly: &Assembly, ccs_mols: &Mols, params: &Params) -> 
             let (pos1, kmer1) = kmer_positions[index1];
             let mut kmer1_consistent = 0.0;
             let mut kmer1_inconsistent = 0.0;
-            for index2 in 0.max(index1 - 100)..(index1 + 100).min(kmer_positions.len()) {
+            let mut start = 0;
+            if index1 > 100 { start = index1 - 100; }
+            for index2 in start..(index1 + 100).min(kmer_positions.len()) {
                 if index1 == index2 { continue; }
                 let (pos2, kmer2) = kmer_positions[index2];
                 if pos1.max(pos2) - pos1.min(pos2) < 5000 {
