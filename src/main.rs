@@ -89,15 +89,15 @@ fn get_mean_sd_pairwise_consistencies(pairwise_kmer_consistency_counts: &HashMap
     (mean_phasing_consistency, sd_phasing_consistency, min_seed_consistency, max_seed_consistency)
 }
 
-fn get_pairwise_consistencies(ccs_mols: &Mols, assembly: &Assembly) -> HashMap<(i32, i32), [u32; 4]> {
+fn get_pairwise_consistencies(ccs_mols: &Mols, assembly: &Assembly, any_number: bool) -> HashMap<(i32, i32), [u32; 4]> {
     let mut pairwise_consistencies: HashMap<(i32, i32), [u32; 4]> = HashMap::new();
     for ccs_mol in ccs_mols.get_molecules() {
         for k1dex in 0..ccs_mol.len() {
             let k1 = ccs_mol[k1dex].abs();
-            if let Some((contig1, pos1)) = kmer_contig_position(k1, assembly){
+            if let Some((contig1, pos1)) = kmer_contig_position(k1, assembly, any_number){
                 for k2dex in (k1dex+1)..ccs_mol.len() {
                     let k2 = ccs_mol[k2dex].abs();
-                    if let Some((contig2, pos2)) = kmer_contig_position(k2, assembly) {
+                    if let Some((contig2, pos2)) = kmer_contig_position(k2, assembly, any_number) {
                         if contig1 != contig2 || pos1.max(pos2) - pos1.min(pos2) > 50000 {
                             continue;
                         }
@@ -132,13 +132,13 @@ fn get_pairwise_consistencies(ccs_mols: &Mols, assembly: &Assembly) -> HashMap<(
     pairwise_consistencies
 }
 
-fn kmer_contig_position(kmer: i32, assembly: &Assembly) -> Option<(i32, usize)> {
+fn kmer_contig_position(kmer: i32, assembly: &Assembly, any: bool) -> Option<(i32, usize)> {
     if let Some((contig_id, number_seen, _order, position)) = assembly.variants.get(&kmer.abs()) {
-        if *number_seen == 1 {
+        if any || *number_seen == 1 {
             return Some((*contig_id, *position));
         }
     } else if let Some((contig_id, number_seen, _order, position)) = assembly.variants.get(&Kmers::pair(kmer.abs())) {
-        if *number_seen == 1 {
+        if any || *number_seen == 1 {
             return Some((*contig_id, *position));
         }
     }
@@ -179,7 +179,7 @@ fn phase(assembly: &Assembly, hic_mols: Mols, ccs_mols: Mols, txg_mols: Mols, se
     
 
 
-    let pairwise_consistencies: HashMap<(i32, i32), [u32;4]> = get_pairwise_consistencies(&ccs_mols, assembly);
+    let pairwise_consistencies: HashMap<(i32, i32), [u32;4]> = get_pairwise_consistencies(&ccs_mols, assembly, false);
 
     // count kmer consistencies to make sure we seed on good kmers
     let pairwise_kmer_consistency_counts: HashMap<i32, u32> = count_kmer_consistencies(&pairwise_consistencies, &params);
@@ -1046,7 +1046,7 @@ fn detect_sex_contigs(assembly: &Assembly, ccs_mols: &Mols, params: &Params) -> 
     let mut denom: f32 = 0.0;
     let mut density_sum: f32 = 0.0;
 
-    let pairwise_consistencies: HashMap<(i32, i32), [u32;4]> = get_pairwise_consistencies(&ccs_mols, assembly);
+    let pairwise_consistencies: HashMap<(i32, i32), [u32;4]> = get_pairwise_consistencies(&ccs_mols, assembly, true);
     let thresholds = PhasingConsistencyThresholds {
         min_count: params.min_phasing_consistency_counts,
         min_percent: params.min_phasing_consistency_percent,
