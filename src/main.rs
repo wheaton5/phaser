@@ -1069,9 +1069,10 @@ fn detect_sex_contigs(assembly: &Assembly, ccs_mols: &Mols, params: &Params) -> 
             let (pos1, kmer1) = kmer_positions[index1];
             let mut kmer1_consistent = 0.0;
             let mut kmer1_inconsistent = 0.0;
-            for index2 in (index1 + 1)..(index1 + 100).min(kmer_positions.len()) {
+            for index2 in 0.max(index1 - 100)..(index1 + 100).min(kmer_positions.len()) {
+                if index1 == index2 { continue; }
                 let (pos2, kmer2) = kmer_positions[index2];
-                if pos2 - pos1 < 5000 {
+                if pos1.max(pos2) - pos1.min(pos2) < 5000 {
                     let count = pairwise_consistencies.get(&(kmer1.abs().min(kmer2.abs()), kmer1.abs().max(kmer2.abs()))).unwrap_or(&[0;4]);
                     let consistency = is_phasing_consistent(count, &thresholds, false);
                     let mut text = "NOT consistent";
