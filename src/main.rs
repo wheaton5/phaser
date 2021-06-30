@@ -105,8 +105,9 @@ fn get_pairwise_consistencies(ccs_mols: &Mols, assembly: &Assembly, any_number: 
                         let key2 = Kmers::canonical_pair(k1.abs().max(k2.abs()));
 
                         let counts = pairwise_consistencies.entry((key1, key2)).or_insert([0;4]);
-                        let k1_ref = k1 % 2 == 0; // which allele ref or alt, pairs are 1,2   3,4 etc
-                        let k2_ref = k2 % 2 == 0;
+
+                        let k1_ref = k1.abs().min(k2.abs()) % 2 == 0; // which allele ref or alt, pairs are 1,2   3,4 etc
+                        let k2_ref = k1.abs().max(k2.abs()) % 2 == 0;
                         if k1_ref && k2_ref {
                             counts[0] += 1;
                         } else if !k1_ref && !k2_ref {
@@ -117,7 +118,7 @@ fn get_pairwise_consistencies(ccs_mols: &Mols, assembly: &Assembly, any_number: 
                             counts[3] += 1;
                         }
                         if ( pos1 == 15769  || pos1 == 19719 ||  pos1 == 20236 ) && (pos2 == 15769  || pos2 == 19719 ||  pos2 == 20236) {
-                            eprintln!("lets dig in. pos1-pos2 {}-{} k1_ref-k2_ref {}-{} mol_id {}", pos1, pos2, k1_ref, k2_ref, mol_id);
+                            eprintln!("lets dig in. pos1-pos2 {}-{} k1_ref-k2_ref {}-{} mol_id {} current counts {:?}", pos1, pos2, k1_ref, k2_ref, mol_id, counts);
                         }
                     }
                     
@@ -1083,9 +1084,9 @@ fn detect_sex_contigs(assembly: &Assembly, ccs_mols: &Mols, params: &Params, kme
                     let key2 = kmer1.max(kmer2);
                     if let Some(count) = pairwise_consistencies.get(&(key1, key2)) {
                         let consistency = is_phasing_consistent(count, &thresholds, false);
-                        //let mut text = "NOT consistent";
-                        //if consistency.is_consistent { text = "IS consistent"; }
-                        //eprintln!("\t{}-{} = {:?} {}",pos1, pos2, count, text);
+                        let mut text = "NOT consistent";
+                        if consistency.is_consistent { text = "IS consistent"; }
+                        eprintln!("\t{}-{} = {:?} {}",pos1, pos2, count, text);
                         if consistency.is_consistent { kmer1_consistent += 1.0; consistent += 1; } else { kmer1_inconsistent += 1.0; inconsistent += 1; }
                     } else {
                         //eprintln!("no counts??? positions {}-{} length {}, kmers {} and {}", pos1, pos2, pos1.max(pos2) - pos1.min(pos2), 
