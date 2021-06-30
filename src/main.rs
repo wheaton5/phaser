@@ -1097,7 +1097,7 @@ fn detect_sex_contigs(assembly: &Assembly, ccs_mols: &Mols, params: &Params, kme
                     
                 } 
             }
-            if kmer1_consistent + kmer1_inconsistent == 0.0 || kmer1_consistent/(kmer1_consistent + kmer1_inconsistent) > 0.75 { consistent_kmers += 1; } else { inconsistent_kmers += 1; }
+            if kmer1_consistent + kmer1_inconsistent == 0.0 || kmer1_consistent/(kmer1_consistent + kmer1_inconsistent) > 0.25 { consistent_kmers += 1; } else { inconsistent_kmers += 1; }
             //eprintln!("contig {} kmer index {} position {} consistent with {} and inconsistent with {} so {}%", contig_id, index1, pos1, kmer1_consistent, kmer1_inconsistent, kmer1_consistent/(kmer1_consistent+kmer1_inconsistent));
 
         }
