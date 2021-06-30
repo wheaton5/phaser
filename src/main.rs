@@ -94,9 +94,11 @@ fn get_pairwise_consistencies(ccs_mols: &Mols, assembly: &Assembly, any_number: 
     for ccs_mol in ccs_mols.get_molecules() {
         for k1dex in 0..ccs_mol.len() {
             let k1 = ccs_mol[k1dex].abs();
+            let k1 = Kmers::canonical_pair(k1);
             if let Some((contig1, pos1)) = kmer_contig_position(k1, assembly, any_number){
                 for k2dex in (k1dex+1)..ccs_mol.len() {
                     let k2 = ccs_mol[k2dex].abs();
+                    let k2 = Kmers::canonical_pair(k2);
                     if let Some((contig2, pos2)) = kmer_contig_position(k2, assembly, any_number) {
                         if contig1 != contig2 || pos1.max(pos2) - pos1.min(pos2) > 50000 {
                             continue;
@@ -1039,7 +1041,7 @@ fn is_phasing_consistent(counts: &[u32;4], thresholds: &PhasingConsistencyThresh
 
 
 
-fn detect_sex_contigs(assembly: &Assembly, ccs_mols: &Mols, params: &Params) -> HashSet<i32> {
+fn detect_sex_contigs(assembly: &Assembly, ccs_mols: &Mols, params: &Params, kmer_info: &Kmers) -> HashSet<i32> {
     let mut sex_contigs: HashSet<i32> = HashSet::new();
     let mut densities: Vec<(f32, f32, usize, usize, usize, usize, usize )> = Vec::new();
     let mut cov_sum: f32 = 0.0;
@@ -1078,12 +1080,22 @@ fn detect_sex_contigs(assembly: &Assembly, ccs_mols: &Mols, params: &Params) -> 
                 let (pos2, kmer2) = kmer_positions[index2];
                 //eprintln!("pos1 {} pos2 {}, {}-{} = {}", pos1, pos2,pos1.max(pos2), pos1.min(pos2), pos1.max(pos2)- pos1.min(pos2));
                 if pos1.max(pos2) - pos1.min(pos2) < 5000 {
-                    let count = pairwise_consistencies.get(&(kmer1.abs().min(kmer2.abs()), kmer1.abs().max(kmer2.abs()))).unwrap_or(&[0;4]);
-                    let consistency = is_phasing_consistent(count, &thresholds, false);
-                    let mut text = "NOT consistent";
-                    if consistency.is_consistent { text = "IS consistent"; }
-                    eprintln!("\t{}-{} = {:?} {}",pos1, pos2, count, text);
-                    if consistency.is_consistent { kmer1_consistent += 1.0; consistent += 1; } else { kmer1_inconsistent += 1.0; inconsistent += 1; }
+                    let kmer1 = Kmers::canonical_pair(kmer1.abs());
+                    let kmer2 = Kmers::canonical_pair(kmer2.abs());
+                    let key1 = kmer1.min(kmer2);
+                    let key2 = kmer1.max(kmer2);
+                    if let Some(count) = pairwise_consistencies.get(&(key1, key2)) {
+                        let consistency = is_phasing_consistent(count, &thresholds, false);
+                        let mut text = "NOT consistent";
+                        if consistency.is_consistent { text = "IS consistent"; }
+                        eprintln!("\t{}-{} = {:?} {}",pos1, pos2, count, text);
+                        if consistency.is_consistent { kmer1_consistent += 1.0; consistent += 1; } else { kmer1_inconsistent += 1.0; inconsistent += 1; }
+                    } else {
+                        eprintln!("no counts??? positions {}-{} length {}, kmers {} and {}", pos1, pos2, pos1.max(pos2) - pos1.min(pos2), 
+                            kmer_info.kmers.get(&kmer1.abs()).unwrap(), kmer_info.kmers.get(&kmer2.abs()).unwrap());
+                    }
+
+                    
                 } 
             }
             if kmer1_consistent + kmer1_inconsistent == 0.0 || kmer1_consistent/(kmer1_consistent + kmer1_inconsistent) > 0.1 { consistent_kmers += 1; } else { inconsistent_kmers += 1; }
