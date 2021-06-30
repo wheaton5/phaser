@@ -1079,20 +1079,21 @@ fn detect_sex_contigs(assembly: &Assembly, ccs_mols: &Mols, params: &Params, kme
                     let key2 = kmer1.max(kmer2);
                     if let Some(count) = pairwise_consistencies.get(&(key1, key2)) {
                         let consistency = is_phasing_consistent(count, &thresholds, false);
-                        let mut text = "NOT consistent";
-                        if consistency.is_consistent { text = "IS consistent"; }
-                        eprintln!("\t{}-{} = {:?} {}",pos1, pos2, count, text);
+                        //let mut text = "NOT consistent";
+                        //if consistency.is_consistent { text = "IS consistent"; }
+                        //eprintln!("\t{}-{} = {:?} {}",pos1, pos2, count, text);
                         if consistency.is_consistent { kmer1_consistent += 1.0; consistent += 1; } else { kmer1_inconsistent += 1.0; inconsistent += 1; }
                     } else {
-                        eprintln!("no counts??? positions {}-{} length {}, kmers {} and {}", pos1, pos2, pos1.max(pos2) - pos1.min(pos2), 
-                            kmer_info.kmers.get(&kmer1.abs()).unwrap(), kmer_info.kmers.get(&kmer2.abs()).unwrap());
+                        //eprintln!("no counts??? positions {}-{} length {}, kmers {} and {}", pos1, pos2, pos1.max(pos2) - pos1.min(pos2), 
+                        //    kmer_info.kmers.get(&kmer1.abs()).unwrap(), kmer_info.kmers.get(&kmer2.abs()).unwrap());
+                        kmer1_inconsistent += 1.0; inconsistent += 1;
                     }
 
                     
                 } 
             }
-            if kmer1_consistent + kmer1_inconsistent == 0.0 || kmer1_consistent/(kmer1_consistent + kmer1_inconsistent) > 0.1 { consistent_kmers += 1; } else { inconsistent_kmers += 1; }
-            eprintln!("contig {} kmer index {} position {} consistent with {} and inconsistent with {} so {}%", contig_id, index1, pos1, kmer1_consistent, kmer1_inconsistent, kmer1_consistent/(kmer1_consistent+kmer1_inconsistent));
+            if kmer1_consistent + kmer1_inconsistent == 0.0 || kmer1_consistent/(kmer1_consistent + kmer1_inconsistent) > 0.75 { consistent_kmers += 1; } else { inconsistent_kmers += 1; }
+            //eprintln!("contig {} kmer index {} position {} consistent with {} and inconsistent with {} so {}%", contig_id, index1, pos1, kmer1_consistent, kmer1_inconsistent, kmer1_consistent/(kmer1_consistent+kmer1_inconsistent));
 
         }
 
