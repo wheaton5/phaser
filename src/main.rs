@@ -116,7 +116,7 @@ fn get_pairwise_consistencies(ccs_mols: &Mols, assembly: &Assembly, any_number: 
                         } else {
                             counts[3] += 1;
                         }
-                        if pos1 == 15769 || pos2 == 15769 || pos1 == 19719 || pos2 == 19719 || pos1 == 20236 || pos2 == 20236 {
+                        if ( pos1 == 15769  || pos1 == 19719 ||  pos1 == 20236 ) && (pos2 == 15769  || pos2 == 19719 ||  pos2 == 20236) {
                             eprintln!("lets dig in. pos1-pos2 {}-{} k1_ref-k2_ref {}-{} mol_id {}", pos1, pos2, k1_ref, k2_ref, mol_id);
                         }
                     }
