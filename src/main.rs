@@ -53,7 +53,7 @@ fn main() {
     let txg_barcodes = load_linked_read_barcodes(Some(&params.txg_mols), &kmers);
     eprintln!("loading assembly kmers");
     let assembly = load_assembly_kmers(&params.assembly_kmers, &params.assembly_fasta, &kmers);
-
+    eprintln!("detecting sex contigs");
     let sex_contigs = detect_sex_contigs(&assembly, &ccs, &params, &kmers);
     /*
     let (putative_phasing, contig_chunk_indices) = phase(&assembly, hic_mols, ccs, txg_barcodes, sex_contigs, &params);
@@ -94,23 +94,16 @@ fn get_pairwise_consistencies(ccs_mols: &Mols, assembly: &Assembly, any_number: 
     for ccs_mol in ccs_mols.get_molecules() {
         for k1dex in 0..ccs_mol.len() {
             let k1 = ccs_mol[k1dex].abs();
-            let k1 = Kmers::canonical_pair(k1);
             if let Some((contig1, pos1)) = kmer_contig_position(k1, assembly, any_number){
                 for k2dex in (k1dex+1)..ccs_mol.len() {
                     let k2 = ccs_mol[k2dex].abs();
-                    let k2 = Kmers::canonical_pair(k2);
                     if let Some((contig2, pos2)) = kmer_contig_position(k2, assembly, any_number) {
                         if contig1 != contig2 || pos1.max(pos2) - pos1.min(pos2) > 50000 {
                             continue;
                         }
-                        let mut key1 = k1.min(k2); // making the key in the hashtable canonical for which one is first and which one is second in the tuple
-                        let mut key2 = k1.max(k2);
-                        if key1 % 2 == 0 { // making the key in the hashtable canonical for which allele is used as the key
-                            key1 = key1 - 1;
-                        }
-                        if key2 % 2 == 0 {
-                            key2 = key2 - 1;
-                        }
+                        let key1 = Kmers::canonical_pair(k1.abs().min(k2.abs()));
+                        let key2 = Kmers::canonical_pair(k1.abs().max(k2.abs()));
+
                         let counts = pairwise_consistencies.entry((key1, key2)).or_insert([0;4]);
                         let k1_ref = k1 % 2 == 0; // which allele ref or alt, pairs are 1,2   3,4 etc
                         let k2_ref = k2 % 2 == 0;
@@ -1047,7 +1040,7 @@ fn detect_sex_contigs(assembly: &Assembly, ccs_mols: &Mols, params: &Params, kme
     let mut cov_sum: f32 = 0.0;
     let mut denom: f32 = 0.0;
     let mut density_sum: f32 = 0.0;
-
+    eprintln!("starting pairwise");
     let pairwise_consistencies: HashMap<(i32, i32), [u32;4]> = get_pairwise_consistencies(&ccs_mols, assembly, true);
     eprintln!("pairwise done with {} entries", pairwise_consistencies.len());
     let thresholds = PhasingConsistencyThresholds {
