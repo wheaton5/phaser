@@ -54,7 +54,7 @@ fn main() {
     eprintln!("loading assembly kmers");
     let assembly = load_assembly_kmers(&params.assembly_kmers, &params.assembly_fasta, &kmers);
 
-    let sex_contigs = detect_sex_contigs(&assembly, &ccs, &params);
+    let sex_contigs = detect_sex_contigs(&assembly, &ccs, &params, &kmers);
     /*
     let (putative_phasing, contig_chunk_indices) = phase(&assembly, hic_mols, ccs, txg_barcodes, sex_contigs, &params);
     //phase(assembly, hic_mols, ccs, sex_contigs, &params);
