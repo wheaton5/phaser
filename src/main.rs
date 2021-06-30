@@ -91,7 +91,7 @@ fn get_mean_sd_pairwise_consistencies(pairwise_kmer_consistency_counts: &HashMap
 
 fn get_pairwise_consistencies(ccs_mols: &Mols, assembly: &Assembly, any_number: bool) -> HashMap<(i32, i32), [u32; 4]> {
     let mut pairwise_consistencies: HashMap<(i32, i32), [u32; 4]> = HashMap::new();
-    for ccs_mol in ccs_mols.get_molecules() {
+    for (mol_id, ccs_mol) in ccs_mols.get_molecules().enumerate() {
         for k1dex in 0..ccs_mol.len() {
             let k1 = ccs_mol[k1dex].abs();
             if let Some((contig1, pos1)) = kmer_contig_position(k1, assembly, any_number){
@@ -116,7 +116,11 @@ fn get_pairwise_consistencies(ccs_mols: &Mols, assembly: &Assembly, any_number: 
                         } else {
                             counts[3] += 1;
                         }
+                        if pos1 == 15769 || pos2 == 15769 || pos1 == 19719 || pos2 == 19719 || pos1 == 20236 || pos2 == 20236 {
+                            eprintln!("lets dig in. pos1-pos2 {}-{} k1_ref-k2_ref {}-{} mol_id {}", pos1, pos2, k1_ref, k2_ref, mol_id);
+                        }
                     }
+                    
                     
                     
                 }
