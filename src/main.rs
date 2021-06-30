@@ -46,11 +46,11 @@ fn main() {
     let kmers = Kmers::load_kmers(&params.het_kmers);
     //let (_variants, molecules) = load_molecule_kmers(&params.txg_mols, &params.hic_mols, &params.longread_mols, &kmers);
     eprintln!("loading hic kmers");
-    let hic_mols = load_hic(Some(&params.hic_mols), &kmers, false);
+    //let hic_mols = load_hic(Some(&params.hic_mols), &kmers, false); TODO ADD BACK
     eprintln!("loading long reads");
     let ccs = load_hifi(Some(&params.ccs_mols), &kmers);
     eprintln!("loading linked reads");
-    let txg_barcodes = load_linked_read_barcodes(Some(&params.txg_mols), &kmers);
+    // let txg_barcodes = load_linked_read_barcodes(Some(&params.txg_mols), &kmers); TODO ADD BACK
     eprintln!("loading assembly kmers");
     let assembly = load_assembly_kmers(&params.assembly_kmers, &params.assembly_fasta, &kmers);
     eprintln!("detecting sex contigs");
